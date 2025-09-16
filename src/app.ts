@@ -22,7 +22,7 @@ export function createApp(): express.Application {
   }));
 
   // Webhook路由需要在JSON解析之前设置
-  app.use('/api/webhooks', webhookRoutes);
+  app.use('/api/subscription-service/v1/webhooks', webhookRoutes);
 
   // JSON解析中间件
   app.use(express.json({ limit: '10mb' }));
@@ -39,8 +39,8 @@ export function createApp(): express.Application {
   });
 
   // API路由
-  app.use('/api/subscriptions', subscriptionRoutes);
-  app.use('/api/organizations', organizationRoutes);
+  app.use('/api/subscription-service/v1/subscriptions', subscriptionRoutes);
+  app.use('/api/subscription-service/v1/organizations', organizationRoutes);
 
   // 404处理
   app.use(notFoundHandler);

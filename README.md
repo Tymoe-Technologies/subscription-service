@@ -49,7 +49,7 @@
 ### v0.2.0 重大功能更新
 
 1. **新增前端缓存优化API**
-   - 添加 `GET /api/organizations/{organizationId}/cache-info` 端点
+   - 添加 `GET /api/subscription-service/v1/organizations/{organizationId}/cache-info` 端点
    - 提供优化的缓存数据格式，减少90%的API调用
    - 支持自动缓存过期机制（10分钟）
 
@@ -69,21 +69,21 @@
 
 ```bash
 # 创建组织
-curl -X POST http://localhost:8088/api/organizations \
+curl -X POST http://localhost:8088/api/subscription-service/v1/organizations \
   -H "X-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"id":"org-123","name":"测试公司","email":"admin@company.com"}'
 
 # 获取组织订阅信息
-curl http://localhost:8088/api/organizations/org-123/subscriptions \
+curl http://localhost:8088/api/subscription-service/v1/organizations/org-123/subscriptions \
   -H "X-API-Key: your-api-key"
 
 # 获取前端缓存信息
-curl http://localhost:8088/api/organizations/org-123/cache-info \
+curl http://localhost:8088/api/subscription-service/v1/organizations/org-123/cache-info \
   -H "X-API-Key: your-api-key"
 
 # 创建试用订阅
-curl -X POST http://localhost:8088/api/subscriptions/trial \
+curl -X POST http://localhost:8088/api/subscription-service/v1/subscriptions/trial \
   -H "X-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"organizationId":"org-123","productKey":"ploml"}'
@@ -191,40 +191,40 @@ Price {
 
 **基础URL**: `http://localhost:8088`
 
-#### 组织管理端点 (`/api/organizations`)
-- **创建组织**: `POST /api/organizations`
-- **获取组织信息**: `GET /api/organizations/{organizationId}`
-- **获取组织订阅**: `GET /api/organizations/{organizationId}/subscriptions`
-- **获取缓存信息**: `GET /api/organizations/{organizationId}/cache-info`
-- **更新组织信息**: `PATCH /api/organizations/{organizationId}`
-- **删除组织**: `DELETE /api/organizations/{organizationId}`
-- **获取试用状态**: `GET /api/organizations/{organizationId}/trial-status`
-- **组织列表**: `GET /api/organizations` (管理员)
+#### 组织管理端点 (`/api/subscription-service/v1/organizations`)
+- **创建组织**: `POST /api/subscription-service/v1/organizations`
+- **获取组织信息**: `GET /api/subscription-service/v1/organizations/{organizationId}`
+- **获取组织订阅**: `GET /api/subscription-service/v1/organizations/{organizationId}/subscriptions`
+- **获取缓存信息**: `GET /api/subscription-service/v1/organizations/{organizationId}/cache-info`
+- **更新组织信息**: `PATCH /api/subscription-service/v1/organizations/{organizationId}`
+- **删除组织**: `DELETE /api/subscription-service/v1/organizations/{organizationId}`
+- **获取试用状态**: `GET /api/subscription-service/v1/organizations/{organizationId}/trial-status`
+- **组织列表**: `GET /api/subscription-service/v1/organizations` (管理员)
 
-#### 订阅管理端点 (`/api/subscriptions`)
-- **创建试用订阅**: `POST /api/subscriptions/trial`
-- **创建付费订阅**: `POST /api/subscriptions/paid`
-- **升级订阅**: `PATCH /api/subscriptions/{subscriptionId}/upgrade`
-- **取消订阅**: `PATCH /api/subscriptions/{subscriptionId}/cancel`
-- **获取订阅详情**: `GET /api/subscriptions/{subscriptionId}`
-- **获取特定产品订阅**: `GET /api/subscriptions/organization/{organizationId}/product/{productKey}`
-- **获取组织订阅摘要**: `GET /api/subscriptions/organization/{organizationId}/summary`
+#### 订阅管理端点 (`/api/subscription-service/v1/subscriptions`)
+- **创建试用订阅**: `POST /api/subscription-service/v1/subscriptions/trial`
+- **创建付费订阅**: `POST /api/subscription-service/v1/subscriptions/paid`
+- **升级订阅**: `PATCH /api/subscription-service/v1/subscriptions/{subscriptionId}/upgrade`
+- **取消订阅**: `PATCH /api/subscription-service/v1/subscriptions/{subscriptionId}/cancel`
+- **获取订阅详情**: `GET /api/subscription-service/v1/subscriptions/{subscriptionId}`
+- **获取特定产品订阅**: `GET /api/subscription-service/v1/subscriptions/organization/{organizationId}/product/{productKey}`
+- **获取组织订阅摘要**: `GET /api/subscription-service/v1/subscriptions/organization/{organizationId}/summary`
 
-#### 计费管理端点 (`/api/billing`)
-- **创建结账会话**: `POST /api/billing/checkout-session`
-- **创建客户门户**: `POST /api/billing/customer-portal`
+#### 计费管理端点 (`/api/subscription-service/v1/billing`)
+- **创建结账会话**: `POST /api/subscription-service/v1/billing/checkout-session`
+- **创建客户门户**: `POST /api/subscription-service/v1/billing/customer-portal`
 
-#### Webhook端点 (`/api/webhooks`)
-- **Stripe Webhook**: `POST /api/webhooks/stripe`
+#### Webhook端点 (`/api/subscription-service/v1/webhooks`)
+- **Stripe Webhook**: `POST /api/subscription-service/v1/webhooks/stripe`
 
 #### 系统端点
 - **健康检查**: `GET /healthz`
 
-### 1. 组织管理 (`/api/organizations`)
+### 1. 组织管理 (`/api/subscription-service/v1/organizations`)
 
 #### 🏢 创建组织
 ```http
-POST /api/organizations
+POST /api/subscription-service/v1/organizations
 X-API-Key: your-api-key
 Content-Type: application/json
 
@@ -253,7 +253,7 @@ Content-Type: application/json
 
 #### 📋 获取组织订阅信息
 ```http
-GET /api/organizations/org-123/subscriptions
+GET /api/subscription-service/v1/organizations/org-123/subscriptions
 X-API-Key: your-api-key
 ```
 
@@ -288,7 +288,7 @@ X-API-Key: your-api-key
 
 #### 🚀 获取前端缓存信息 (新功能)
 ```http
-GET /api/organizations/org-123/cache-info
+GET /api/subscription-service/v1/organizations/org-123/cache-info
 X-API-Key: your-api-key
 ```
 
@@ -326,11 +326,11 @@ X-API-Key: your-api-key
 }
 ```
 
-### 2. 订阅管理 (`/api/subscriptions`)
+### 2. 订阅管理 (`/api/subscription-service/v1/subscriptions`)
 
 #### 🎫 创建试用订阅
 ```http
-POST /api/subscriptions/trial
+POST /api/subscription-service/v1/subscriptions/trial
 X-API-Key: your-api-key
 Content-Type: application/json
 
@@ -364,7 +364,7 @@ Content-Type: application/json
 
 #### 💳 创建付费订阅
 ```http
-POST /api/subscriptions/paid
+POST /api/subscription-service/v1/subscriptions/paid
 X-API-Key: your-api-key
 Content-Type: application/json
 
@@ -391,7 +391,7 @@ Content-Type: application/json
 
 #### ⬆️ 升级订阅
 ```http
-PATCH /api/subscriptions/sub-456/upgrade
+PATCH /api/subscription-service/v1/subscriptions/sub-456/upgrade
 X-API-Key: your-api-key
 Content-Type: application/json
 
@@ -401,11 +401,11 @@ Content-Type: application/json
 }
 ```
 
-### 3. 计费管理 (`/api/billing`)
+### 3. 计费管理 (`/api/subscription-service/v1/billing`)
 
 #### 🛒 创建结账会话
 ```http
-POST /api/billing/checkout-session
+POST /api/subscription-service/v1/billing/checkout-session
 X-API-Key: your-api-key
 Content-Type: application/json
 
@@ -421,7 +421,7 @@ Content-Type: application/json
 
 #### 🏠 创建客户门户
 ```http
-POST /api/billing/customer-portal
+POST /api/subscription-service/v1/billing/customer-portal
 X-API-Key: your-api-key
 Content-Type: application/json
 
@@ -677,7 +677,7 @@ sequenceDiagram
     participant S as Subscription Service
     participant DB as Database
     
-    F->>S: POST /api/subscriptions/trial
+    F->>S: POST /api/subscription-service/v1/subscriptions/trial
     S->>DB: 检查组织是否已使用试用
     DB-->>S: 返回试用状态
     S->>DB: 创建试用订阅
@@ -693,7 +693,7 @@ sequenceDiagram
     participant Stripe as Stripe API
     participant DB as Database
     
-    F->>S: POST /api/subscriptions/paid
+    F->>S: POST /api/subscription-service/v1/subscriptions/paid
     S->>Stripe: 创建Checkout Session
     Stripe-->>S: 返回Session URL
     S-->>F: 返回支付链接
@@ -713,7 +713,7 @@ sequenceDiagram
     alt 缓存命中
         Cache-->>App: 返回权限信息
     else 缓存未命中
-        App->>S: GET /api/organizations/{id}/cache-info
+        App->>S: GET /api/subscription-service/v1/organizations/{id}/cache-info
         S-->>App: 返回完整权限信息
         App->>Cache: 缓存权限信息(10分钟)
     end
@@ -844,7 +844,7 @@ Subscription Service通过内部API调用Auth Service获取组织信息：
 ```typescript
 // 验证组织ID的有效性
 const validateOrganizationAccess = async (organizationId: string, userToken: string) => {
-  const response = await fetch(`${AUTH_SERVICE_URL}/api/organizations/${organizationId}`, {
+  const response = await fetch(`${AUTH_SERVICE_URL}/api/subscription-service/v1/organizations/${organizationId}`, {
     headers: {
       'Authorization': `Bearer ${userToken}`,
       'X-Internal-Service': 'subscription-service'
@@ -873,7 +873,7 @@ class SubscriptionService {
   // 获取组织订阅信息（带缓存）
   async getOrganizationSubscriptions(organizationId, useCache = true) {
     const endpoint = useCache ? 'cache-info' : 'subscriptions';
-    const response = await fetch(`${this.baseURL}/api/organizations/${organizationId}/${endpoint}`, {
+    const response = await fetch(`${this.baseURL}/api/subscription-service/v1/organizations/${organizationId}/${endpoint}`, {
       headers: {
         'X-API-Key': this.apiKey,
         'Content-Type': 'application/json'
@@ -906,7 +906,7 @@ class SubscriptionService {
 
   // 创建试用订阅
   async startTrial(organizationId, productKey) {
-    const response = await fetch(`${this.baseURL}/api/subscriptions/trial`, {
+    const response = await fetch(`${this.baseURL}/api/subscription-service/v1/subscriptions/trial`, {
       method: 'POST',
       headers: {
         'X-API-Key': this.apiKey,
@@ -920,7 +920,7 @@ class SubscriptionService {
 
   // 升级到付费订阅
   async upgradeToPaid(organizationId, productKey, tier, billingCycle) {
-    const response = await fetch(`${this.baseURL}/api/subscriptions/paid`, {
+    const response = await fetch(`${this.baseURL}/api/subscription-service/v1/subscriptions/paid`, {
       method: 'POST',
       headers: {
         'X-API-Key': this.apiKey,
@@ -1031,7 +1031,7 @@ export const requireFeatureAccess = (featureKey: string) => {
 };
 
 // 使用示例
-app.get('/api/advanced-reports', 
+app.get('/api/subscription-service/v1/advanced-reports', 
   requireFeatureAccess('analytics_reports'),
   (req, res) => {
     // 只有高级套餐用户可以访问
@@ -1073,7 +1073,7 @@ npx prisma studio
 #### 3. **Stripe配置**
 ```bash
 # 1. 在Stripe Dashboard中创建产品和价格
-# 2. 配置Webhook端点：POST /api/webhooks/stripe
+# 2. 配置Webhook端点：POST /api/subscription-service/v1/webhooks/stripe
 # 3. 复制Webhook签名密钥到环境变量
 ```
 
@@ -1277,6 +1277,16 @@ echo "Cache cleared successfully!"
 
 ## 开发指南
 
+### 🏗️ 服务架构
+
+订阅服务采用分层架构设计，主要入口文件说明：
+
+- **`src/index.ts`** - 主入口点，负责应用启动、错误处理和进程管理
+- **`src/server.ts`** - 服务器启动模块，处理数据库/Redis连接和优雅关闭
+- **`src/app.ts`** - Express应用配置，定义路由和中间件
+
+所有API路径都以 `/api/subscription-service/v1` 为基础路径，确保服务间的清晰隔离。
+
 ### 🛠️ 开发环境设置
 
 #### 1. **本地开发工具**
@@ -1298,7 +1308,7 @@ brew install stripe/stripe-cli/stripe
 stripe login
 
 # 转发Webhook到本地
-stripe listen --forward-to localhost:8088/api/webhooks/stripe
+stripe listen --forward-to localhost:8088/api/subscription-service/v1/webhooks/stripe
 ```
 
 #### 3. **开发流程**
@@ -1313,7 +1323,7 @@ npm run migrate
 npm run dev
 
 # 4. 在另一个终端启动Stripe监听
-stripe listen --forward-to localhost:8088/api/webhooks/stripe
+stripe listen --forward-to localhost:8088/api/subscription-service/v1/webhooks/stripe
 ```
 
 ### 🧪 测试策略
@@ -1357,9 +1367,9 @@ import request from 'supertest';
 import { app } from '../src/app.js';
 
 describe('Subscription API', () => {
-  test('POST /api/subscriptions/trial should create trial subscription', async () => {
+  test('POST /api/subscription-service/v1/subscriptions/trial should create trial subscription', async () => {
     const response = await request(app)
-      .post('/api/subscriptions/trial')
+      .post('/api/subscription-service/v1/subscriptions/trial')
       .set('X-API-Key', process.env.TEST_API_KEY)
       .send({
         organizationId: 'test-org-123',
@@ -1439,7 +1449,7 @@ export class SubscriptionService {
 #### 1. **Stripe Webhook验证失败**
 ```bash
 # 检查Webhook签名
-curl -X POST localhost:8088/api/webhooks/stripe \
+curl -X POST localhost:8088/api/subscription-service/v1/webhooks/stripe \
   -H "stripe-signature: invalid_signature" \
   -d "{}"
 
@@ -1467,7 +1477,7 @@ echo $REDIS_PASSWORD
 #### 3. **订阅状态同步问题**
 ```bash
 # 手动同步订阅状态
-curl -X POST localhost:8088/api/admin/sync-subscriptions \
+curl -X POST localhost:8088/api/subscription-service/v1/admin/sync-subscriptions \
   -H "X-API-Key: admin-api-key"
 
 # 检查Stripe订阅状态
@@ -1533,19 +1543,19 @@ WHERE tier = 'trial'
 
 ```bash
 # 创建组织
-curl -X POST http://localhost:8088/api/organizations \
+curl -X POST http://localhost:8088/api/subscription-service/v1/organizations \
   -H "X-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"id":"org-123","name":"测试公司","email":"admin@company.com"}'
 
 # 创建试用订阅
-curl -X POST http://localhost:8088/api/subscriptions/trial \
+curl -X POST http://localhost:8088/api/subscription-service/v1/subscriptions/trial \
   -H "X-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"organizationId":"org-123","productKey":"ploml"}'
 
 # 获取订阅信息（缓存优化）
-curl http://localhost:8088/api/organizations/org-123/cache-info \
+curl http://localhost:8088/api/subscription-service/v1/organizations/org-123/cache-info \
   -H "X-API-Key: your-api-key"
 
 # 健康检查
