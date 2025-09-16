@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  subscription-service:
+    build: .
+    ports:
+      - "8088:8088"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    networks:
+      - subscription-network
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: subscription_service
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: your_secure_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - subscription-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - subscription-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  subscription-network:
+    driver: bridge

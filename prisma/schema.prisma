@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 简化的组织订阅模型
+model Organization {
+  id                String   @id @default(cuid())
+  name              String
+  stripeCustomerId  String?  @unique @map("stripe_customer_id")
+  hasUsedTrial      Boolean  @default(false) @map("has_used_trial")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  subscriptions     Subscription[]
+
+  @@map("organizations")
+}
+
+// 产品线：ploml（美业）、mopai（餐饮）
+model Product {
+  key       String   @id // "ploml" | "mopai"
+  name      String   // "Ploml Beauty Management" | "Mopai F&B Management"
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  subscriptions Subscription[]
+  prices        Price[]
+
+  @@map("products")
+}
+
+// 订阅计划
+model Subscription {
+  id                    String    @id @default(cuid())
+  organizationId        String    @map("organization_id")
+  productKey            String    @map("product_key")
+  tier                  String    // "trial" | "basic" | "standard" | "advanced" | "pro"
+  status                String    // "trialing" | "active" | "past_due" | "canceled" | "incomplete"
+  billingCycle          String?   @map("billing_cycle") // "monthly" | "yearly"
+  currentPeriodStart    DateTime? @map("current_period_start")
+  currentPeriodEnd      DateTime? @map("current_period_end")
+  trialEnd              DateTime? @map("trial_end")
+  stripeSubscriptionId  String?   @unique @map("stripe_subscription_id")
+  stripePriceId         String?   @map("stripe_price_id")
+  cancelAtPeriodEnd     Boolean   @default(false) @map("cancel_at_period_end")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productKey], references: [key])
+  price        Price?       @relation(fields: [stripePriceId], references: [stripePriceId])
+
+  @@unique([organizationId, productKey])
+  @@map("subscriptions")
+}
+
+// Stripe价格配置
+model Price {
+  id            String  @id @default(cuid())
+  stripePriceId String  @unique @map("stripe_price_id")
+  productKey    String  @map("product_key")
+  tier          String  // "basic" | "standard" | "advanced" | "pro"
+  billingCycle  String  @map("billing_cycle") // "monthly" | "yearly"
+  amount        Int     // 价格（分）
+  currency      String  @default("usd")
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  product       Product        @relation(fields: [productKey], references: [key])
+  subscriptions Subscription[]
+
+  @@unique([productKey, tier, billingCycle])
+  @@map("prices")
+}
