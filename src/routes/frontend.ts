@@ -4,6 +4,10 @@ import {
   checkFeatureAccess,
   getProductPricing,
   getUserOrganizationsOverview,
+  startTrial,
+  createCheckoutSession,
+  upgradeUserSubscription,
+  cancelUserSubscription,
 } from '../controllers/frontend.js';
 import { validateUserJWT } from '../middleware/jwt.js';
 import { validateOrganizationAccess } from '../middleware/organization.js';
@@ -27,5 +31,19 @@ router.get('/organizations/:organizationId/subscription-status', getOrganization
 
 // 检查功能权限
 router.get('/organizations/:organizationId/products/:productKey/features/:featureKey/access', checkFeatureAccess);
+
+// ===== 用户订阅管理 =====
+
+// 开始试用
+router.post('/organizations/:organizationId/subscriptions/start-trial', startTrial);
+
+// 创建支付会话（订阅付费套餐）
+router.post('/organizations/:organizationId/subscriptions/checkout', createCheckoutSession);
+
+// 升级订阅
+router.post('/organizations/:organizationId/subscriptions/upgrade', upgradeUserSubscription);
+
+// 取消订阅
+router.post('/organizations/:organizationId/subscriptions/cancel', cancelUserSubscription);
 
 export default router;

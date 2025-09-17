@@ -197,3 +197,298 @@ export async function getUserOrganizationsOverview(req: Request, res: Response):
     });
   }
 }
+
+// ===== 用户订阅管理功能 =====
+
+// 开始试用
+export async function startTrial(req: Request, res: Response): Promise<void> {
+  try {
+    const { organizationId } = req.params;
+    const { productKey } = req.body;
+    const userId = (req as AuthenticatedRequest).user.id;
+
+    if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
+      res.status(400).json({
+        error: 'invalid_product',
+        message: '产品类型必须是 ploml 或 mopai',
+      });
+      return;
+    }
+
+    const subscription = await subscriptionService.createTrialSubscription({
+      organizationId: organizationId!,
+      productKey,
+    });
+
+    logger.info('用户开始试用', {
+      userId,
+      organizationId,
+      productKey,
+      subscriptionId: subscription.id,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        subscription,
+        trialPeriodDays: 30,
+        features: getTierFeatures(productKey, 'trial'),
+        message: '试用已开始，享受30天免费体验！',
+      },
+    });
+  } catch (error) {
+    logger.error('开始试用失败', {
+      organizationId: req.params.organizationId,
+      userId: (req as AuthenticatedRequest).user.id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    if (error instanceof Error) {
+      if (error.message.includes('已经使用过试用期') || error.message.includes('已有')) {
+        res.status(409).json({
+          error: 'trial_already_used',
+          message: error.message,
+        });
+        return;
+      }
+    }
+
+    res.status(500).json({
+      error: 'server_error',
+      message: '开始试用失败',
+    });
+  }
+}
+
+// 创建支付会话（订阅付费套餐）
+export async function createCheckoutSession(req: Request, res: Response): Promise<void> {
+  try {
+    const { organizationId } = req.params;
+    const { productKey, tier, billingCycle, successUrl, cancelUrl } = req.body;
+    const userId = (req as AuthenticatedRequest).user.id;
+
+    if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
+      res.status(400).json({
+        error: 'invalid_product',
+        message: '产品类型必须是 ploml 或 mopai',
+      });
+      return;
+    }
+
+    if (!tier || !['basic', 'standard', 'advanced', 'pro'].includes(tier)) {
+      res.status(400).json({
+        error: 'invalid_tier',
+        message: '套餐类型必须是 basic, standard, advanced 或 pro',
+      });
+      return;
+    }
+
+    if (!billingCycle || !['monthly', 'yearly'].includes(billingCycle)) {
+      res.status(400).json({
+        error: 'invalid_billing_cycle',
+        message: '计费周期必须是 monthly 或 yearly',
+      });
+      return;
+    }
+
+    if (!successUrl || !cancelUrl) {
+      res.status(400).json({
+        error: 'missing_urls',
+        message: '缺少支付成功或取消的回调URL',
+      });
+      return;
+    }
+
+    const result = await subscriptionService.createPaidSubscription({
+      organizationId: organizationId!,
+      productKey,
+      tier,
+      billingCycle,
+      successUrl,
+      cancelUrl,
+    });
+
+    logger.info('创建支付会话', {
+      userId,
+      organizationId,
+      productKey,
+      tier,
+      billingCycle,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        checkoutUrl: result.checkoutUrl,
+        message: '请完成支付以激活订阅',
+      },
+    });
+  } catch (error) {
+    logger.error('创建支付会话失败', {
+      organizationId: req.params.organizationId,
+      userId: (req as AuthenticatedRequest).user.id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      error: 'server_error',
+      message: '创建支付会话失败',
+    });
+  }
+}
+
+// 升级订阅
+export async function upgradeUserSubscription(req: Request, res: Response): Promise<void> {
+  try {
+    const { organizationId } = req.params;
+    const { productKey, newTier, billingCycle, successUrl, cancelUrl } = req.body;
+    const userId = (req as AuthenticatedRequest).user.id;
+
+    if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
+      res.status(400).json({
+        error: 'invalid_product',
+        message: '产品类型必须是 ploml 或 mopai',
+      });
+      return;
+    }
+
+    if (!newTier || !['basic', 'standard', 'advanced', 'pro'].includes(newTier)) {
+      res.status(400).json({
+        error: 'invalid_tier',
+        message: '套餐类型必须是 basic, standard, advanced 或 pro',
+      });
+      return;
+    }
+
+    // 获取当前订阅
+    const currentSubscription = await subscriptionService.getOrganizationSubscription(organizationId!, productKey);
+
+    if (!currentSubscription) {
+      res.status(404).json({
+        error: 'subscription_not_found',
+        message: '未找到当前订阅，请先开始试用或订阅',
+      });
+      return;
+    }
+
+    // 如果需要支付（从试用升级或升级到更高套餐）
+    if (currentSubscription.tier === 'trial' ||
+        (successUrl && cancelUrl && currentSubscription.tier !== newTier)) {
+
+      const result = await subscriptionService.createPaidSubscription({
+        organizationId: organizationId!,
+        productKey,
+        tier: newTier,
+        billingCycle: billingCycle || 'monthly',
+        successUrl,
+        cancelUrl,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          requiresPayment: true,
+          checkoutUrl: result.checkoutUrl,
+          message: '请完成支付以升级订阅',
+        },
+      });
+      return;
+    }
+
+    // 直接升级（不需要额外付费）
+    const subscription = await subscriptionService.upgradeSubscription({
+      subscriptionId: currentSubscription.id,
+      newTier,
+      billingCycle,
+    });
+
+    logger.info('用户升级订阅', {
+      userId,
+      organizationId,
+      productKey,
+      oldTier: currentSubscription.tier,
+      newTier,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        requiresPayment: false,
+        subscription,
+        features: getTierFeatures(productKey, newTier),
+        message: '订阅已成功升级！',
+      },
+    });
+  } catch (error) {
+    logger.error('升级订阅失败', {
+      organizationId: req.params.organizationId,
+      userId: (req as AuthenticatedRequest).user.id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      error: 'server_error',
+      message: '升级订阅失败',
+    });
+  }
+}
+
+// 取消订阅
+export async function cancelUserSubscription(req: Request, res: Response): Promise<void> {
+  try {
+    const { organizationId } = req.params;
+    const { productKey, cancelAtPeriodEnd = true } = req.body;
+    const userId = (req as AuthenticatedRequest).user.id;
+
+    if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
+      res.status(400).json({
+        error: 'invalid_product',
+        message: '产品类型必须是 ploml 或 mopai',
+      });
+      return;
+    }
+
+    // 获取当前订阅
+    const currentSubscription = await subscriptionService.getOrganizationSubscription(organizationId!, productKey);
+
+    if (!currentSubscription) {
+      res.status(404).json({
+        error: 'subscription_not_found',
+        message: '未找到订阅',
+      });
+      return;
+    }
+
+    const subscription = await subscriptionService.cancelSubscription(
+      currentSubscription.id,
+      cancelAtPeriodEnd
+    );
+
+    logger.info('用户取消订阅', {
+      userId,
+      organizationId,
+      productKey,
+      subscriptionId: currentSubscription.id,
+      cancelAtPeriodEnd,
+    });
+
+    res.json({
+      success: true,
+      data: { subscription },
+      message: cancelAtPeriodEnd
+        ? '订阅将在当前计费周期结束时取消，在此之前您仍可使用所有功能'
+        : '订阅已立即取消',
+    });
+  } catch (error) {
+    logger.error('取消订阅失败', {
+      organizationId: req.params.organizationId,
+      userId: (req as AuthenticatedRequest).user.id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      error: 'server_error',
+      message: '取消订阅失败',
+    });
+  }
+}
