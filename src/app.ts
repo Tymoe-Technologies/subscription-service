@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from './middleware/error.js';
 import subscriptionRoutes from './routes/subscription.js';
 import organizationRoutes from './routes/organization.js';
 import webhookRoutes from './routes/webhook.js';
+import frontendRoutes from './routes/frontend.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -38,9 +39,12 @@ export function createApp(): express.Application {
     });
   });
 
-  // API路由
-  app.use('/api/subscription-service/v1/subscriptions', subscriptionRoutes);
-  app.use('/api/subscription-service/v1/organizations', organizationRoutes);
+  // API路由 - 服务间调用（需要内部API密钥）
+  app.use('/api/subscription-service/v1/admin/subscriptions', subscriptionRoutes);
+  app.use('/api/subscription-service/v1/admin/organizations', organizationRoutes);
+
+  // API路由 - 前端调用（需要用户JWT）
+  app.use('/api/subscription-service/v1', frontendRoutes);
 
   // 404处理
   app.use(notFoundHandler);

@@ -31,6 +31,9 @@ const envSchema = z.object({
   
   // 年度折扣（百分比）
   YEARLY_DISCOUNT: z.coerce.number().default(20),
+
+  // 外部服务配置
+  AUTH_SERVICE_URL: z.string().default('http://localhost:8087'),
 });
 
 function validateEnv() {

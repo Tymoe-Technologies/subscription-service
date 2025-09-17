@@ -37,6 +37,11 @@ export const service = {
     internalApiKey: env.INTERNAL_API_KEY,
     corsOrigin: env.CORS_ORIGIN,
   },
+
+  // 外部服务配置
+  externalServices: {
+    authService: env.AUTH_SERVICE_URL || 'http://localhost:8087',
+  },
   
   // 业务配置
   business: {

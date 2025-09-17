@@ -191,28 +191,38 @@ Price {
 
 **基础URL**: `http://localhost:8088`
 
-#### 组织管理端点 (`/api/subscription-service/v1/organizations`)
-- **创建组织**: `POST /api/subscription-service/v1/organizations`
-- **获取组织信息**: `GET /api/subscription-service/v1/organizations/{organizationId}`
-- **获取组织订阅**: `GET /api/subscription-service/v1/organizations/{organizationId}/subscriptions`
-- **获取缓存信息**: `GET /api/subscription-service/v1/organizations/{organizationId}/cache-info`
-- **更新组织信息**: `PATCH /api/subscription-service/v1/organizations/{organizationId}`
-- **删除组织**: `DELETE /api/subscription-service/v1/organizations/{organizationId}`
-- **获取试用状态**: `GET /api/subscription-service/v1/organizations/{organizationId}/trial-status`
-- **组织列表**: `GET /api/subscription-service/v1/organizations` (管理员)
+### 前端API端点 (需要用户JWT认证)
 
-#### 订阅管理端点 (`/api/subscription-service/v1/subscriptions`)
-- **创建试用订阅**: `POST /api/subscription-service/v1/subscriptions/trial`
-- **创建付费订阅**: `POST /api/subscription-service/v1/subscriptions/paid`
-- **升级订阅**: `PATCH /api/subscription-service/v1/subscriptions/{subscriptionId}/upgrade`
-- **取消订阅**: `PATCH /api/subscription-service/v1/subscriptions/{subscriptionId}/cancel`
-- **获取订阅详情**: `GET /api/subscription-service/v1/subscriptions/{subscriptionId}`
-- **获取特定产品订阅**: `GET /api/subscription-service/v1/subscriptions/organization/{organizationId}/product/{productKey}`
-- **获取组织订阅摘要**: `GET /api/subscription-service/v1/subscriptions/organization/{organizationId}/summary`
+#### 用户相关
+- **获取用户组织概览**: `GET /api/subscription-service/v1/user/organizations-overview`
 
-#### 计费管理端点 (`/api/subscription-service/v1/billing`)
-- **创建结账会话**: `POST /api/subscription-service/v1/billing/checkout-session`
-- **创建客户门户**: `POST /api/subscription-service/v1/billing/customer-portal`
+#### 产品定价
+- **获取产品定价**: `GET /api/subscription-service/v1/products/{productKey}/pricing`
+
+#### 组织订阅管理
+- **获取组织订阅状态**: `GET /api/subscription-service/v1/organizations/{organizationId}/subscription-status`
+- **检查功能权限**: `GET /api/subscription-service/v1/organizations/{organizationId}/products/{productKey}/features/{featureKey}/access`
+
+### 管理员API端点 (需要内部API密钥)
+
+#### 组织管理端点 (`/api/subscription-service/v1/admin/organizations`)
+- **创建组织**: `POST /api/subscription-service/v1/admin/organizations`
+- **获取组织信息**: `GET /api/subscription-service/v1/admin/organizations/{organizationId}`
+- **获取组织订阅**: `GET /api/subscription-service/v1/admin/organizations/{organizationId}/subscriptions`
+- **获取缓存信息**: `GET /api/subscription-service/v1/admin/organizations/{organizationId}/cache-info`
+- **更新组织信息**: `PATCH /api/subscription-service/v1/admin/organizations/{organizationId}`
+- **删除组织**: `DELETE /api/subscription-service/v1/admin/organizations/{organizationId}`
+- **获取试用状态**: `GET /api/subscription-service/v1/admin/organizations/{organizationId}/trial-status`
+- **组织列表**: `GET /api/subscription-service/v1/admin/organizations` (管理员)
+
+#### 订阅管理端点 (`/api/subscription-service/v1/admin/subscriptions`)
+- **创建试用订阅**: `POST /api/subscription-service/v1/admin/subscriptions/trial`
+- **创建付费订阅**: `POST /api/subscription-service/v1/admin/subscriptions/paid`
+- **升级订阅**: `PATCH /api/subscription-service/v1/admin/subscriptions/{subscriptionId}/upgrade`
+- **取消订阅**: `PATCH /api/subscription-service/v1/admin/subscriptions/{subscriptionId}/cancel`
+- **获取订阅详情**: `GET /api/subscription-service/v1/admin/subscriptions/{subscriptionId}`
+- **获取特定产品订阅**: `GET /api/subscription-service/v1/admin/subscriptions/organization/{organizationId}/product/{productKey}`
+- **获取组织订阅摘要**: `GET /api/subscription-service/v1/admin/subscriptions/organization/{organizationId}/summary`
 
 #### Webhook端点 (`/api/subscription-service/v1/webhooks`)
 - **Stripe Webhook**: `POST /api/subscription-service/v1/webhooks/stripe`
@@ -1285,7 +1295,22 @@ echo "Cache cleared successfully!"
 - **`src/server.ts`** - 服务器启动模块，处理数据库/Redis连接和优雅关闭
 - **`src/app.ts`** - Express应用配置，定义路由和中间件
 
-所有API路径都以 `/api/subscription-service/v1` 为基础路径，确保服务间的清晰隔离。
+### 🔐 认证架构
+
+订阅服务支持两种认证方式：
+
+1. **服务间调用** - 使用内部API密钥验证（`/admin` 路径）
+2. **前端直接调用** - 使用用户JWT token验证（需要auth-service公钥）
+
+### 📡 调用流程
+
+```
+前端(ploml/mopai) → subscription-service
+      ↓
+   JWT验证 + 组织权限验证 → 返回订阅状态
+```
+
+所有API路径都以 `/api/subscription-service/v1` 为基础路径。
 
 ### 🛠️ 开发环境设置
 
