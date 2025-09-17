@@ -12,7 +12,11 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
-export async function validateUserJWT(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function validateUserJWT(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
 
@@ -30,7 +34,7 @@ export async function validateUserJWT(req: Request, res: Response, next: NextFun
     // 验证JWT token
     const payload = jwt.verify(token, publicKey, {
       algorithms: ['RS256'],
-    }) as any;
+    }) as { sub?: string; email?: string; exp?: number; [key: string]: unknown };
 
     if (!payload.sub || !payload.email) {
       res.status(401).json({
@@ -43,8 +47,8 @@ export async function validateUserJWT(req: Request, res: Response, next: NextFun
     (req as AuthenticatedRequest).user = {
       id: payload.sub,
       email: payload.email,
-      iat: payload.iat,
-      exp: payload.exp,
+      iat: typeof payload.iat === 'number' ? payload.iat : 0,
+      exp: typeof payload.exp === 'number' ? payload.exp : 0,
     };
 
     logger.debug('JWT验证成功', {
@@ -55,7 +59,7 @@ export async function validateUserJWT(req: Request, res: Response, next: NextFun
     next();
   } catch (error) {
     logger.warn('JWT验证失败', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error',
       token: req.headers.authorization ? 'present' : 'missing',
     });
 

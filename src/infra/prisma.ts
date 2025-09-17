@@ -1,18 +1,21 @@
 import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger.js';
 import { service } from '../config/config.js';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  log: service.nodeEnv === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  datasources: {
-    db: {
-      url: service.database.url,
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: service.nodeEnv === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    datasources: {
+      db: {
+        url: service.database.url,
+      },
     },
-  },
-});
+  });
 
 if (service.nodeEnv !== 'production') {
   globalForPrisma.prisma = prisma;
@@ -24,7 +27,7 @@ export async function checkDatabaseHealth(): Promise<boolean> {
     await prisma.$queryRaw`SELECT 1`;
     return true;
   } catch (error) {
-    console.error('数据库连接失败:', error);
+    logger.error('数据库连接失败:', error);
     return false;
   }
 }

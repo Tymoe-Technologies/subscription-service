@@ -1,6 +1,7 @@
 import { prisma } from '../infra/prisma.js';
 import { stripeService } from '../infra/stripe.js';
 import { cacheService } from '../infra/redis.js';
+import { logger } from '../utils/logger.js';
 import type { Organization } from '@prisma/client';
 
 export interface CreateOrganizationParams {
@@ -78,7 +79,9 @@ export class OrganizationService {
   }
 
   // 获取组织及其订阅信息
-  async getOrganizationWithSubscriptions(id: string): Promise<OrganizationWithSubscriptions | null> {
+  async getOrganizationWithSubscriptions(
+    id: string
+  ): Promise<OrganizationWithSubscriptions | null> {
     const cacheKey = `org_subs:${id}`;
     const cached = await cacheService.get<OrganizationWithSubscriptions>(cacheKey);
     if (cached) {
@@ -123,11 +126,11 @@ export class OrganizationService {
     // 如果有Stripe客户ID，同步更新Stripe客户信息
     if (organization.stripeCustomerId && data.name) {
       try {
-        await (stripeService as any).stripe.customers.update(organization.stripeCustomerId, {
+        await stripeService.updateCustomer(organization.stripeCustomerId, {
           name: data.name,
         });
       } catch (error) {
-        console.error('更新Stripe客户信息失败:', error);
+        logger.error('更新Stripe客户信息失败:', error);
         // 不抛出错误，继续执行
       }
     }
@@ -152,13 +155,13 @@ export class OrganizationService {
   // 检查组织是否已使用试用
   async hasUsedTrial(id: string): Promise<boolean> {
     const organization = await this.getOrganization(id);
-    return organization?.hasUsedTrial || false;
+    return organization?.hasUsedTrial ?? false;
   }
 
   // 获取组织的Stripe客户ID
   async getStripeCustomerId(id: string): Promise<string | null> {
     const organization = await this.getOrganization(id);
-    return organization?.stripeCustomerId || null;
+    return organization?.stripeCustomerId ?? null;
   }
 
   // 设置组织的Stripe客户ID
@@ -187,7 +190,7 @@ export class OrganizationService {
         try {
           await stripeService.cancelSubscription(subscription.stripeSubscriptionId, false);
         } catch (error) {
-          console.error(`取消Stripe订阅失败 ${subscription.stripeSubscriptionId}:`, error);
+          logger.error(`取消Stripe订阅失败 ${subscription.stripeSubscriptionId}:`, error);
         }
       }
 
@@ -207,10 +210,7 @@ export class OrganizationService {
 
   // 清除组织相关缓存
   private async clearOrganizationCache(id: string): Promise<void> {
-    await Promise.all([
-      cacheService.delete(`org:${id}`),
-      cacheService.delete(`org_subs:${id}`),
-    ]);
+    await Promise.all([cacheService.delete(`org:${id}`), cacheService.delete(`org_subs:${id}`)]);
   }
 
   // 检查组织是否存在

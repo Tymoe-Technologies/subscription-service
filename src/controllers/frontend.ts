@@ -6,13 +6,24 @@ import { hasFeatureAccess, getTierFeatures } from '../config/features.js';
 import { logger } from '../utils/logger.js';
 
 // 获取组织的订阅状态（前端缓存用）
-export async function getOrganizationSubscriptionStatus(req: Request, res: Response): Promise<void> {
+export async function getOrganizationSubscriptionStatus(
+  req: Request,
+  res: Response
+): Promise<void> {
   try {
     const { organizationId } = req.params;
     const userId = (req as AuthenticatedRequest).user.id;
 
+    if (!organizationId) {
+      res.status(400).json({
+        error: 'missing_organization_id',
+        message: '缺少组织ID',
+      });
+      return;
+    }
+
     // 获取组织信息
-    const organization = await organizationService.getOrganization(organizationId!);
+    const organization = await organizationService.getOrganization(organizationId);
     if (!organization) {
       res.status(404).json({
         error: 'organization_not_found',
@@ -22,7 +33,7 @@ export async function getOrganizationSubscriptionStatus(req: Request, res: Respo
     }
 
     // 获取组织的所有订阅
-    const subscriptions = await subscriptionService.getOrganizationSubscriptions(organizationId!);
+    const subscriptions = await subscriptionService.getOrganizationSubscriptions(organizationId);
 
     // 构建前端需要的订阅状态信息
     const subscriptionStatus = {
@@ -56,7 +67,7 @@ export async function getOrganizationSubscriptionStatus(req: Request, res: Respo
     logger.error('获取组织订阅状态失败', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user.id,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
 
     res.status(500).json({
@@ -72,7 +83,15 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
     const { organizationId, productKey, featureKey } = req.params;
     const userId = (req as AuthenticatedRequest).user.id;
 
-    if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
+    if (!organizationId || !productKey || !featureKey) {
+      res.status(400).json({
+        error: 'missing_parameters',
+        message: '缺少必要参数',
+      });
+      return;
+    }
+
+    if (!['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
         message: '无效的产品类型',
@@ -81,14 +100,17 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
     }
 
     // 获取组织的该产品订阅
-    const subscription = await subscriptionService.getOrganizationSubscription(organizationId!, productKey!);
+    const subscription = await subscriptionService.getOrganizationSubscription(
+      organizationId,
+      productKey
+    );
 
     let hasAccess = false;
     let currentTier = 'none';
 
     if (subscription && ['trialing', 'active'].includes(subscription.status)) {
       currentTier = subscription.tier;
-      hasAccess = hasFeatureAccess(productKey!, subscription.tier, featureKey!);
+      hasAccess = hasFeatureAccess(productKey, subscription.tier, featureKey);
     }
 
     logger.debug('功能权限检查', {
@@ -115,7 +137,7 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
       productKey: req.params.productKey,
       featureKey: req.params.featureKey,
       userId: (req as AuthenticatedRequest).user.id,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
 
     res.status(500).json({
@@ -126,7 +148,7 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
 }
 
 // 获取产品的定价信息
-export async function getProductPricing(req: Request, res: Response): Promise<void> {
+export function getProductPricing(req: Request, res: Response): void {
   try {
     const { productKey } = req.params;
     const userId = (req as AuthenticatedRequest).user.id;
@@ -140,7 +162,7 @@ export async function getProductPricing(req: Request, res: Response): Promise<vo
     }
 
     // 暂时返回空的定价信息，因为subscriptionService还没有getProductPricing方法
-    const pricing: any[] = [];
+    const pricing: unknown[] = [];
 
     logger.debug('获取产品定价', {
       userId,
@@ -159,7 +181,7 @@ export async function getProductPricing(req: Request, res: Response): Promise<vo
     logger.error('获取产品定价失败', {
       productKey: req.params.productKey,
       userId: (req as AuthenticatedRequest).user.id,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
 
     res.status(500).json({
@@ -170,10 +192,8 @@ export async function getProductPricing(req: Request, res: Response): Promise<vo
 }
 
 // 获取用户拥有的所有组织的订阅概览
-export async function getUserOrganizationsOverview(req: Request, res: Response): Promise<void> {
+export function getUserOrganizationsOverview(req: Request, res: Response): void {
   try {
-    const userId = (req as AuthenticatedRequest).user.id;
-
     // 这个端点需要调用auth-service获取用户的所有组织
     // 然后获取每个组织的订阅状态
     // 暂时返回提示信息，因为需要auth-service配合
@@ -188,7 +208,7 @@ export async function getUserOrganizationsOverview(req: Request, res: Response):
   } catch (error) {
     logger.error('获取用户组织概览失败', {
       userId: (req as AuthenticatedRequest).user.id,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
 
     res.status(500).json({
@@ -207,6 +227,14 @@ export async function startTrial(req: Request, res: Response): Promise<void> {
     const { productKey } = req.body;
     const userId = (req as AuthenticatedRequest).user.id;
 
+    if (!organizationId) {
+      res.status(400).json({
+        error: 'missing_organization_id',
+        message: '缺少组织ID',
+      });
+      return;
+    }
+
     if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
@@ -216,7 +244,7 @@ export async function startTrial(req: Request, res: Response): Promise<void> {
     }
 
     const subscription = await subscriptionService.createTrialSubscription({
-      organizationId: organizationId!,
+      organizationId,
       productKey,
     });
 
@@ -240,7 +268,7 @@ export async function startTrial(req: Request, res: Response): Promise<void> {
     logger.error('开始试用失败', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user.id,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
 
     if (error instanceof Error) {
@@ -266,6 +294,14 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
     const { organizationId } = req.params;
     const { productKey, tier, billingCycle, successUrl, cancelUrl } = req.body;
     const userId = (req as AuthenticatedRequest).user.id;
+
+    if (!organizationId) {
+      res.status(400).json({
+        error: 'missing_organization_id',
+        message: '缺少组织ID',
+      });
+      return;
+    }
 
     if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
@@ -300,7 +336,7 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
     }
 
     const result = await subscriptionService.createPaidSubscription({
-      organizationId: organizationId!,
+      organizationId,
       productKey,
       tier,
       billingCycle,
@@ -327,7 +363,7 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
     logger.error('创建支付会话失败', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user.id,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
 
     res.status(500).json({
@@ -343,6 +379,14 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
     const { organizationId } = req.params;
     const { productKey, newTier, billingCycle, successUrl, cancelUrl } = req.body;
     const userId = (req as AuthenticatedRequest).user.id;
+
+    if (!organizationId) {
+      res.status(400).json({
+        error: 'missing_organization_id',
+        message: '缺少组织ID',
+      });
+      return;
+    }
 
     if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
@@ -361,7 +405,10 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
     }
 
     // 获取当前订阅
-    const currentSubscription = await subscriptionService.getOrganizationSubscription(organizationId!, productKey);
+    const currentSubscription = await subscriptionService.getOrganizationSubscription(
+      organizationId,
+      productKey
+    );
 
     if (!currentSubscription) {
       res.status(404).json({
@@ -372,14 +419,15 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
     }
 
     // 如果需要支付（从试用升级或升级到更高套餐）
-    if (currentSubscription.tier === 'trial' ||
-        (successUrl && cancelUrl && currentSubscription.tier !== newTier)) {
-
+    if (
+      currentSubscription.tier === 'trial' ||
+      (successUrl && cancelUrl && currentSubscription.tier !== newTier)
+    ) {
       const result = await subscriptionService.createPaidSubscription({
-        organizationId: organizationId!,
+        organizationId,
         productKey,
         tier: newTier,
-        billingCycle: billingCycle || 'monthly',
+        billingCycle: billingCycle ?? 'monthly',
         successUrl,
         cancelUrl,
       });
@@ -423,7 +471,7 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
     logger.error('升级订阅失败', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user.id,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
 
     res.status(500).json({
@@ -440,6 +488,14 @@ export async function cancelUserSubscription(req: Request, res: Response): Promi
     const { productKey, cancelAtPeriodEnd = true } = req.body;
     const userId = (req as AuthenticatedRequest).user.id;
 
+    if (!organizationId) {
+      res.status(400).json({
+        error: 'missing_organization_id',
+        message: '缺少组织ID',
+      });
+      return;
+    }
+
     if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
@@ -449,7 +505,10 @@ export async function cancelUserSubscription(req: Request, res: Response): Promi
     }
 
     // 获取当前订阅
-    const currentSubscription = await subscriptionService.getOrganizationSubscription(organizationId!, productKey);
+    const currentSubscription = await subscriptionService.getOrganizationSubscription(
+      organizationId,
+      productKey
+    );
 
     if (!currentSubscription) {
       res.status(404).json({
@@ -483,7 +542,7 @@ export async function cancelUserSubscription(req: Request, res: Response): Promi
     logger.error('取消订阅失败', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user.id,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
 
     res.status(500).json({

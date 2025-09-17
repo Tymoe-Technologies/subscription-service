@@ -35,24 +35,26 @@ export async function startServer(port: number): Promise<void> {
   const gracefulShutdown = async (signal: string) => {
     logger.info(`收到${signal}信号，开始优雅关闭...`);
 
-    server.close(async () => {
-      logger.info('HTTP服务器已关闭');
+    server.close(() => {
+      void (async () => {
+        logger.info('HTTP服务器已关闭');
 
-      try {
-        await closeDatabaseConnection();
-        logger.info('数据库连接已关闭');
-      } catch (error) {
-        logger.error('关闭数据库连接失败', { error });
-      }
+        try {
+          await closeDatabaseConnection();
+          logger.info('数据库连接已关闭');
+        } catch (error) {
+          logger.error('关闭数据库连接失败', { error });
+        }
 
-      try {
-        await closeRedisConnection();
-        logger.info('Redis连接已关闭');
-      } catch (error) {
-        logger.error('关闭Redis连接失败', { error });
-      }
+        try {
+          await closeRedisConnection();
+          logger.info('Redis连接已关闭');
+        } catch (error) {
+          logger.error('关闭Redis连接失败', { error });
+        }
 
-      process.exit(0);
+        process.exit(0);
+      })();
     });
 
     // 强制退出（如果优雅关闭超时）
@@ -60,9 +62,16 @@ export async function startServer(port: number): Promise<void> {
       logger.error('优雅关闭超时，强制退出');
       process.exit(1);
     }, 10000);
+
+    // 等待关闭完成
+    await new Promise(resolve => setTimeout(resolve, 100));
   };
 
   // 监听关闭信号
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => {
+    void gracefulShutdown('SIGTERM');
+  });
+  process.on('SIGINT', () => {
+    void gracefulShutdown('SIGINT');
+  });
 }

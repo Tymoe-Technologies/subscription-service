@@ -28,7 +28,7 @@ export const plomlFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   customer_management: {
     key: 'customer_management',
     name: '客户管理',
@@ -41,7 +41,7 @@ export const plomlFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   service_catalog: {
     key: 'service_catalog',
     name: '服务目录',
@@ -54,7 +54,7 @@ export const plomlFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   // 高级功能
   staff_scheduling: {
     key: 'staff_scheduling',
@@ -68,7 +68,7 @@ export const plomlFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   inventory_management: {
     key: 'inventory_management',
     name: '库存管理',
@@ -81,7 +81,7 @@ export const plomlFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   analytics_reports: {
     key: 'analytics_reports',
     name: '数据分析',
@@ -94,7 +94,7 @@ export const plomlFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   // 专业功能
   multi_location: {
     key: 'multi_location',
@@ -108,7 +108,7 @@ export const plomlFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   api_access: {
     key: 'api_access',
     name: 'API访问',
@@ -121,7 +121,7 @@ export const plomlFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   custom_branding: {
     key: 'custom_branding',
     name: '品牌定制',
@@ -151,7 +151,7 @@ export const mopaiFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   menu_management: {
     key: 'menu_management',
     name: '菜单管理',
@@ -164,7 +164,7 @@ export const mopaiFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   order_taking: {
     key: 'order_taking',
     name: '点餐下单',
@@ -177,7 +177,7 @@ export const mopaiFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   // 高级功能
   kitchen_display: {
     key: 'kitchen_display',
@@ -191,7 +191,7 @@ export const mopaiFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   inventory_tracking: {
     key: 'inventory_tracking',
     name: '库存跟踪',
@@ -204,7 +204,7 @@ export const mopaiFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   staff_management: {
     key: 'staff_management',
     name: '员工管理',
@@ -217,7 +217,7 @@ export const mopaiFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   // 专业功能
   multi_restaurant: {
     key: 'multi_restaurant',
@@ -231,7 +231,7 @@ export const mopaiFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   delivery_integration: {
     key: 'delivery_integration',
     name: '外卖集成',
@@ -244,7 +244,7 @@ export const mopaiFeatures: Record<string, FeatureConfig> = {
       pro: true,
     },
   },
-  
+
   analytics_dashboard: {
     key: 'analytics_dashboard',
     name: '数据仪表板',
@@ -272,18 +272,14 @@ export function getProductFeatures(productKey: string): Record<string, FeatureCo
 }
 
 // 检查用户是否有某个功能的权限
-export function hasFeatureAccess(
-  productKey: string,
-  tier: string,
-  featureKey: string
-): boolean {
+export function hasFeatureAccess(productKey: string, tier: string, featureKey: string): boolean {
   const features = getProductFeatures(productKey);
   const feature = features[featureKey];
-  
+
   if (!feature) {
     return false;
   }
-  
+
   const tierKey = tier as keyof FeatureConfig['tiers'];
   return feature?.tiers[tierKey] || false;
 }
@@ -292,10 +288,8 @@ export function hasFeatureAccess(
 export function getTierFeatures(productKey: string, tier: string): string[] {
   const features = getProductFeatures(productKey);
   const tierKey = tier as keyof FeatureConfig['tiers'];
-  
-  return Object.keys(features).filter(featureKey => 
-    features[featureKey]?.tiers[tierKey] || false
-  );
+
+  return Object.keys(features).filter(featureKey => features[featureKey]?.tiers[tierKey] ?? false);
 }
 
 // 订阅套餐定义

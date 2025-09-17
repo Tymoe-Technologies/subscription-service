@@ -80,7 +80,7 @@ class AuthServiceClient {
       logger.error('Failed to check organization access', {
         userId,
         organizationId,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error',
       });
       return false;
     }

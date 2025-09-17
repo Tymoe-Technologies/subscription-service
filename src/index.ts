@@ -18,7 +18,7 @@ async function main() {
 
   } catch (error) {
     logger.error('Failed to start application', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
     });
 
@@ -29,7 +29,7 @@ async function main() {
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught exception', {
-    error: error.message,
+    error: error instanceof Error ? error.message : String(error),
     stack: error.stack,
   });
   process.exit(1);
@@ -48,7 +48,7 @@ process.on('unhandledRejection', (reason, promise) => {
 // Start the application
 main().catch((error) => {
   logger.error('Application startup failed', {
-    error: error instanceof Error ? error.message : 'Unknown error',
+    error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error',
     stack: error instanceof Error ? error.stack : undefined,
   });
   process.exit(1);

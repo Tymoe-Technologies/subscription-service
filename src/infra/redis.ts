@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 import { service } from '../config/config.js';
+import { logger } from '../utils/logger.js';
 
 let redis: Redis | null = null;
 
@@ -8,29 +9,29 @@ export function createRedisClient(): Redis {
     return redis;
   }
 
-  const redisOptions: any = {
+  const redisOptions: Record<string, unknown> = {
     maxRetriesPerRequest: service.redis.maxRetries,
     lazyConnect: true,
     connectTimeout: 5000,
     commandTimeout: 5000,
   };
-  
+
   if (service.redis.password) {
     redisOptions.password = service.redis.password;
   }
-  
+
   redis = new Redis(service.redis.url, redisOptions);
 
   redis.on('connect', () => {
-    console.log('Redis connected');
+    logger.info('Redis connected');
   });
 
-  redis.on('error', (error) => {
-    console.error('Redis connection error:', error);
+  redis.on('error', error => {
+    logger.error('Redis connection error:', error);
   });
 
   redis.on('close', () => {
-    console.log('Redis connection closed');
+    logger.info('Redis connection closed');
   });
 
   return redis;
@@ -47,7 +48,7 @@ export async function isRedisConnected(): Promise<boolean> {
     }
     await redis.ping();
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -65,12 +66,12 @@ export class CacheService {
       const value = await this.redis.get(key);
       return value ? JSON.parse(value) : null;
     } catch (error) {
-      console.error('Redis get error:', error);
+      logger.error('Redis get error:', error);
       return null;
     }
   }
 
-  async set(key: string, value: any, ttlSeconds?: number): Promise<void> {
+  async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
     try {
       const serialized = JSON.stringify(value);
       if (ttlSeconds) {
@@ -79,7 +80,7 @@ export class CacheService {
         await this.redis.set(key, serialized);
       }
     } catch (error) {
-      console.error('Redis set error:', error);
+      logger.error('Redis set error:', error);
     }
   }
 
@@ -87,7 +88,7 @@ export class CacheService {
     try {
       await this.redis.del(key);
     } catch (error) {
-      console.error('Redis delete error:', error);
+      logger.error('Redis delete error:', error);
     }
   }
 
@@ -96,7 +97,7 @@ export class CacheService {
       const result = await this.redis.exists(key);
       return result === 1;
     } catch (error) {
-      console.error('Redis exists error:', error);
+      logger.error('Redis exists error:', error);
       return false;
     }
   }
@@ -107,7 +108,7 @@ export class CacheService {
       const result = await this.redis.set(lockKey, '1', 'EX', ttlSeconds, 'NX');
       return result === 'OK';
     } catch (error) {
-      console.error('Redis acquire lock error:', error);
+      logger.error('Redis acquire lock error:', error);
       return false;
     }
   }
@@ -116,7 +117,7 @@ export class CacheService {
     try {
       await this.redis.del(lockKey);
     } catch (error) {
-      console.error('Redis release lock error:', error);
+      logger.error('Redis release lock error:', error);
     }
   }
 }

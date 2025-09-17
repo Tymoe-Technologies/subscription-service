@@ -3,7 +3,7 @@ import { stripeService } from '../infra/stripe.js';
 import { cacheService } from '../infra/redis.js';
 import { organizationService } from './organization.js';
 import { service } from '../config/config.js';
-import { subscriptionTiers } from '../config/features.js';
+import { logger } from '../utils/logger.js';
 import type { Subscription, Organization } from '@prisma/client';
 
 export interface CreateTrialSubscriptionParams {
@@ -95,7 +95,9 @@ export class SubscriptionService {
   }
 
   // 创建付费订阅（通过Stripe Checkout）
-  async createPaidSubscription(params: CreatePaidSubscriptionParams): Promise<{ checkoutUrl: string }> {
+  async createPaidSubscription(
+    params: CreatePaidSubscriptionParams
+  ): Promise<{ checkoutUrl: string }> {
     const { organizationId, productKey, tier, billingCycle, successUrl, cancelUrl } = params;
 
     // 检查组织是否存在
@@ -145,7 +147,7 @@ export class SubscriptionService {
       },
     });
 
-    return { checkoutUrl: checkoutSession.url! };
+    return { checkoutUrl: checkoutSession.url ?? '' };
   }
 
   // 升级订阅
@@ -179,7 +181,7 @@ export class SubscriptionService {
         productKey_tier_billingCycle: {
           productKey: subscription.productKey,
           tier: newTier,
-          billingCycle: billingCycle || subscription.billingCycle || 'monthly',
+          billingCycle: billingCycle ?? subscription.billingCycle ?? 'monthly',
         },
       },
     });
@@ -206,7 +208,7 @@ export class SubscriptionService {
       where: { id: subscriptionId },
       data: {
         tier: newTier,
-        billingCycle: billingCycle || subscription.billingCycle,
+        billingCycle: billingCycle ?? subscription.billingCycle,
         stripePriceId: newPrice.stripePriceId,
         status: subscription.status === 'trialing' ? 'active' : subscription.status,
         trialEnd: subscription.status === 'trialing' ? new Date() : subscription.trialEnd,
@@ -312,52 +314,75 @@ export class SubscriptionService {
   }
 
   // 处理Stripe webhook事件
-  async handleStripeWebhook(event: any): Promise<void> {
+  async handleStripeWebhook(event: Record<string, unknown>): Promise<void> {
     switch (event.type) {
       case 'checkout.session.completed':
-        await this.handleCheckoutSessionCompleted(event.data.object);
+        if (event.data && typeof event.data === 'object' && 'object' in event.data) {
+          await this.handleCheckoutSessionCompleted(event.data.object as Record<string, unknown>);
+        }
         break;
-        
+
       case 'invoice.payment_succeeded':
-        await this.handleInvoicePaymentSucceeded(event.data.object);
+        if (event.data && typeof event.data === 'object' && 'object' in event.data) {
+          await this.handleInvoicePaymentSucceeded(event.data.object as Record<string, unknown>);
+        }
         break;
-        
+
       case 'invoice.payment_failed':
-        await this.handleInvoicePaymentFailed(event.data.object);
+        if (event.data && typeof event.data === 'object' && 'object' in event.data) {
+          await this.handleInvoicePaymentFailed(event.data.object as Record<string, unknown>);
+        }
         break;
-        
+
       case 'customer.subscription.updated':
-        await this.handleSubscriptionUpdated(event.data.object);
+        if (event.data && typeof event.data === 'object' && 'object' in event.data) {
+          await this.handleSubscriptionUpdated(event.data.object as Record<string, unknown>);
+        }
         break;
-        
+
       case 'customer.subscription.deleted':
-        await this.handleSubscriptionDeleted(event.data.object);
+        if (event.data && typeof event.data === 'object' && 'object' in event.data) {
+          await this.handleSubscriptionDeleted(event.data.object as Record<string, unknown>);
+        }
         break;
-        
+
       default:
-        console.log(`未处理的webhook事件类型: ${event.type}`);
+        logger.info(`未处理的webhook事件类型: ${event.type}`);
     }
   }
 
   // 处理结账会话完成
-  private async handleCheckoutSessionCompleted(session: any): Promise<void> {
-    const { organizationId, productKey, tier, billingCycle } = session.metadata;
-    
+  private async handleCheckoutSessionCompleted(session: Record<string, unknown>): Promise<void> {
+    const metadata = session.metadata as Record<string, unknown> | undefined;
+    if (!metadata) {
+      logger.error('Checkout session metadata 不存在:', session);
+      return;
+    }
+    const { organizationId, productKey, tier, billingCycle } = metadata;
+
     if (!organizationId || !productKey || !tier || !billingCycle) {
-      console.error('Checkout session metadata 不完整:', session.metadata);
+      logger.error('Checkout session metadata 不完整:', session.metadata);
       return;
     }
 
     // 获取Stripe订阅
-    const stripeSubscription = await stripeService.getSubscription(session.subscription);
+    const subscriptionId = session.subscription as string | undefined;
+    if (!subscriptionId) {
+      logger.error('缺少subscription ID:', session);
+      return;
+    }
+    const stripeSubscription = await stripeService.getSubscription(subscriptionId);
     if (!stripeSubscription) {
-      console.error('无法获取Stripe订阅:', session.subscription);
+      logger.error('无法获取Stripe订阅:', session.subscription);
       return;
     }
 
     // 检查是否已有订阅记录
-    let subscription = await this.getOrganizationSubscription(organizationId, productKey);
-    
+    const subscription = await this.getOrganizationSubscription(
+      organizationId as string,
+      productKey as string
+    );
+
     if (subscription) {
       // 更新现有订阅
       await prisma.subscription.update({
@@ -367,10 +392,12 @@ export class SubscriptionService {
           billingCycle,
           status: stripeSubscription.status,
           stripeSubscriptionId: stripeSubscription.id,
-          stripePriceId: stripeSubscription.items.data[0]?.price.id || null,
+          stripePriceId: stripeSubscription.items.data[0]?.price.id ?? null,
           currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
           currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-          trialEnd: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : null,
+          trialEnd: stripeSubscription.trial_end
+            ? new Date(stripeSubscription.trial_end * 1000)
+            : null,
         },
       });
     } else {
@@ -383,23 +410,26 @@ export class SubscriptionService {
           billingCycle: billingCycle as string,
           status: stripeSubscription.status,
           stripeSubscriptionId: stripeSubscription.id,
-          stripePriceId: stripeSubscription.items.data[0]?.price.id || null,
+          stripePriceId: stripeSubscription.items.data[0]?.price.id ?? null,
           currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
           currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-          trialEnd: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : null,
+          trialEnd: stripeSubscription.trial_end
+            ? new Date(stripeSubscription.trial_end * 1000)
+            : null,
         },
       });
     }
 
     // 清除缓存
-    await this.clearSubscriptionCache(organizationId, productKey);
+    await this.clearSubscriptionCache(organizationId as string, productKey as string);
   }
 
   // 处理发票支付成功
-  private async handleInvoicePaymentSucceeded(invoice: any): Promise<void> {
-    if (invoice.subscription) {
+  private async handleInvoicePaymentSucceeded(invoice: Record<string, unknown>): Promise<void> {
+    const subscriptionId = invoice.subscription as string | undefined;
+    if (subscriptionId) {
       const subscription = await prisma.subscription.findFirst({
-        where: { stripeSubscriptionId: invoice.subscription },
+        where: { stripeSubscriptionId: subscriptionId },
       });
 
       if (subscription) {
@@ -415,10 +445,11 @@ export class SubscriptionService {
   }
 
   // 处理发票支付失败
-  private async handleInvoicePaymentFailed(invoice: any): Promise<void> {
-    if (invoice.subscription) {
+  private async handleInvoicePaymentFailed(invoice: Record<string, unknown>): Promise<void> {
+    const subscriptionId = invoice.subscription as string | undefined;
+    if (subscriptionId) {
       const subscription = await prisma.subscription.findFirst({
-        where: { stripeSubscriptionId: invoice.subscription },
+        where: { stripeSubscriptionId: subscriptionId },
       });
 
       if (subscription) {
@@ -434,19 +465,24 @@ export class SubscriptionService {
   }
 
   // 处理订阅更新
-  private async handleSubscriptionUpdated(stripeSubscription: any): Promise<void> {
+  private async handleSubscriptionUpdated(stripeSubscription: Record<string, unknown>): Promise<void> {
+    const subscriptionId = stripeSubscription.id as string | undefined;
+    if (!subscriptionId) {
+      logger.error('缺少subscription ID:', stripeSubscription);
+      return;
+    }
     const subscription = await prisma.subscription.findFirst({
-      where: { stripeSubscriptionId: stripeSubscription.id },
+      where: { stripeSubscriptionId: subscriptionId },
     });
 
     if (subscription) {
       await prisma.subscription.update({
         where: { id: subscription.id },
         data: {
-          status: stripeSubscription.status,
-          currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-          currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-          cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+          status: stripeSubscription.status as string,
+          currentPeriodStart: new Date((stripeSubscription.current_period_start as number) * 1000),
+          currentPeriodEnd: new Date((stripeSubscription.current_period_end as number) * 1000),
+          cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end as boolean,
         },
       });
 
@@ -456,9 +492,14 @@ export class SubscriptionService {
   }
 
   // 处理订阅删除
-  private async handleSubscriptionDeleted(stripeSubscription: any): Promise<void> {
+  private async handleSubscriptionDeleted(stripeSubscription: Record<string, unknown>): Promise<void> {
+    const subscriptionId = stripeSubscription.id as string | undefined;
+    if (!subscriptionId) {
+      logger.error('缺少subscription ID:', stripeSubscription);
+      return;
+    }
     const subscription = await prisma.subscription.findFirst({
-      where: { stripeSubscriptionId: stripeSubscription.id },
+      where: { stripeSubscriptionId: subscriptionId },
     });
 
     if (subscription) {
@@ -484,7 +525,7 @@ export class SubscriptionService {
   // 检查订阅状态
   async isSubscriptionActive(organizationId: string, productKey: string): Promise<boolean> {
     const subscription = await this.getOrganizationSubscription(organizationId, productKey);
-    
+
     if (!subscription) {
       return false;
     }
@@ -513,17 +554,17 @@ export class SubscriptionService {
     }>;
   }> {
     const subscriptions = await this.getOrganizationSubscriptions(organizationId);
-    
+
     const summary = subscriptions.map(sub => {
       const isActive = this.isSubscriptionActive(organizationId, sub.productKey);
       let daysUntilExpiry: number | undefined;
-      
+
       if (sub.currentPeriodEnd) {
         const now = new Date();
         const diffTime = sub.currentPeriodEnd.getTime() - now.getTime();
         daysUntilExpiry = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       }
-      
+
       const result: {
         productKey: string;
         tier: string;
@@ -536,11 +577,11 @@ export class SubscriptionService {
         status: sub.status,
         isActive: Boolean(isActive),
       };
-      
+
       if (daysUntilExpiry !== undefined) {
         result.daysUntilExpiry = daysUntilExpiry;
       }
-      
+
       return result;
     });
 

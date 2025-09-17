@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { organizationService } from '../services/organization.js';
+import { logger } from '../utils/logger.js';
 import { getTierFeatures } from '../config/features.js';
 
 // 创建组织
@@ -25,13 +26,13 @@ export async function createOrganization(req: Request, res: Response): Promise<v
       success: true,
       data: { organization },
     });
-  } catch (error: any) {
-    console.error('创建组织失败:', error);
-    
-    if (error.message.includes('已存在')) {
+  } catch (error: unknown) {
+    logger.error('创建组织失败:', error);
+
+    if (error instanceof Error ? error.message : String(error).includes('已存在')) {
       res.status(409).json({
         error: 'conflict',
-        message: error.message,
+        message: error instanceof Error ? error.message : String(error),
       });
       return;
     }
@@ -70,8 +71,8 @@ export async function getOrganization(req: Request, res: Response): Promise<void
       success: true,
       data: { organization },
     });
-  } catch (error: any) {
-    console.error('获取组织信息失败:', error);
+  } catch (error: unknown) {
+    logger.error('获取组织信息失败:', error);
     res.status(500).json({
       error: 'server_error',
       message: '获取组织信息失败',
@@ -108,16 +109,16 @@ export async function getOrganizationWithSubscriptions(req: Request, res: Respon
       subscriptions: organization.subscriptions.map(subscription => ({
         ...subscription,
         features: getTierFeatures(subscription.productKey, subscription.tier),
-        isActive: ['active', 'trialing'].includes(subscription.status)
-      }))
+        isActive: ['active', 'trialing'].includes(subscription.status),
+      })),
     };
 
     res.json({
       success: true,
       data: { organization: enrichedOrganization },
     });
-  } catch (error: any) {
-    console.error('获取组织订阅信息失败:', error);
+  } catch (error: unknown) {
+    logger.error('获取组织订阅信息失败:', error);
     res.status(500).json({
       error: 'server_error',
       message: '获取组织订阅信息失败',
@@ -149,32 +150,37 @@ export async function getOrganizationCacheInfo(req: Request, res: Response): Pro
     }
 
     // 构建前端缓存友好的数据格式
-    const subscriptions: Record<string, any> = {};
-    
+    const subscriptions: Record<string, {
+      tier: string | null;
+      status: string;
+      expiresAt: Date | null;
+      isActive: boolean;
+      billingCycle: string | null;
+      features: string[];
+    }> = {};
+
     for (const subscription of organization.subscriptions) {
       subscriptions[subscription.productKey] = {
         tier: subscription.tier,
         status: subscription.status,
-        expiresAt: subscription.currentPeriodEnd || subscription.trialEnd,
+        expiresAt: subscription.currentPeriodEnd ?? subscription.trialEnd,
         isActive: ['active', 'trialing'].includes(subscription.status),
         billingCycle: subscription.billingCycle,
-        features: getTierFeatures(subscription.productKey, subscription.tier)
+        features: getTierFeatures(subscription.productKey, subscription.tier),
       };
     }
 
     // 添加未订阅的产品（显示为无订阅状态）
     const allProducts = ['ploml', 'mopai'];
     for (const productKey of allProducts) {
-      if (!subscriptions[productKey]) {
-        subscriptions[productKey] = {
-          tier: null,
-          status: 'none',
-          expiresAt: null,
-          isActive: false,
-          billingCycle: null,
-          features: []
-        };
-      }
+      subscriptions[productKey] ??= {
+        tier: null,
+        status: 'none',
+        expiresAt: null,
+        isActive: false,
+        billingCycle: null,
+        features: [],
+      };
     }
 
     const cacheValidUntil = new Date(Date.now() + 10 * 60 * 1000); // 10分钟后过期
@@ -185,11 +191,11 @@ export async function getOrganizationCacheInfo(req: Request, res: Response): Pro
         organizationId,
         subscriptions,
         cacheValidUntil: cacheValidUntil.toISOString(),
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
       },
     });
-  } catch (error: any) {
-    console.error('获取组织缓存信息失败:', error);
+  } catch (error: unknown) {
+    logger.error('获取组织缓存信息失败:', error);
     res.status(500).json({
       error: 'server_error',
       message: '获取组织缓存信息失败',
@@ -227,11 +233,11 @@ export async function updateOrganization(req: Request, res: Response): Promise<v
       success: true,
       data: { organization },
     });
-  } catch (error: any) {
-    console.error('更新组织信息失败:', error);
-    
+  } catch (error: unknown) {
+    logger.error('更新组织信息失败:', error);
+
     // Prisma错误处理
-    if (error.code === 'P2025') {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
       res.status(404).json({
         error: 'not_found',
         message: '组织不存在',
@@ -277,8 +283,8 @@ export async function getTrialStatus(req: Request, res: Response): Promise<void>
         trialPeriodDays: 30,
       },
     });
-  } catch (error: any) {
-    console.error('获取试用状态失败:', error);
+  } catch (error: unknown) {
+    logger.error('获取试用状态失败:', error);
     res.status(500).json({
       error: 'server_error',
       message: '获取试用状态失败',
@@ -305,8 +311,8 @@ export async function deleteOrganization(req: Request, res: Response): Promise<v
       success: true,
       message: '组织已删除，所有相关订阅已取消',
     });
-  } catch (error: any) {
-    console.error('删除组织失败:', error);
+  } catch (error: unknown) {
+    logger.error('删除组织失败:', error);
     res.status(500).json({
       error: 'server_error',
       message: '删除组织失败',
@@ -334,8 +340,8 @@ export async function listOrganizations(req: Request, res: Response): Promise<vo
       success: true,
       data: result,
     });
-  } catch (error: any) {
-    console.error('获取组织列表失败:', error);
+  } catch (error: unknown) {
+    logger.error('获取组织列表失败:', error);
     res.status(500).json({
       error: 'server_error',
       message: '获取组织列表失败',

@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { subscriptionService } from '../services/subscription.js';
-import { organizationService } from '../services/organization.js';
 import { hasFeatureAccess, getTierFeatures, subscriptionTiers } from '../config/features.js';
 import { prisma } from '../infra/prisma.js';
+import { logger } from '../utils/logger.js';
 
 // 创建试用订阅
 export async function createTrialSubscription(req: Request, res: Response): Promise<void> {
@@ -38,13 +38,14 @@ export async function createTrialSubscription(req: Request, res: Response): Prom
         features: getTierFeatures(productKey, 'trial'),
       },
     });
-  } catch (error: any) {
-    console.error('创建试用订阅失败:', error);
-    
-    if (error.message.includes('已经使用过试用期') || error.message.includes('已有')) {
+  } catch (error: unknown) {
+    logger.error('创建试用订阅失败:', error);
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('已经使用过试用期') || errorMessage.includes('已有')) {
       res.status(409).json({
         error: 'conflict',
-        message: error.message,
+        message: errorMessage,
       });
       return;
     }
@@ -106,13 +107,14 @@ export async function createPaidSubscription(req: Request, res: Response): Promi
       success: true,
       data: result,
     });
-  } catch (error: any) {
-    console.error('创建付费订阅失败:', error);
-    
-    if (error.message.includes('不存在') || error.message.includes('找不到')) {
+  } catch (error: unknown) {
+    logger.error('创建付费订阅失败:', error);
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('不存在') || errorMessage.includes('找不到')) {
       res.status(404).json({
         error: 'not_found',
-        message: error.message,
+        message: errorMessage,
       });
       return;
     }
@@ -175,21 +177,22 @@ export async function upgradeSubscription(req: Request, res: Response): Promise<
         features: getTierFeatures(subscription.productKey, newTier),
       },
     });
-  } catch (error: any) {
-    console.error('升级订阅失败:', error);
-    
-    if (error.message.includes('不存在') || error.message.includes('找不到')) {
+  } catch (error: unknown) {
+    logger.error('升级订阅失败:', error);
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('不存在') || errorMessage.includes('找不到')) {
       res.status(404).json({
         error: 'not_found',
-        message: error.message,
+        message: errorMessage,
       });
       return;
     }
-    
-    if (error.message.includes('只允许升级') || error.message.includes('只能升级')) {
+
+    if (errorMessage.includes('只允许升级') || errorMessage.includes('只能升级')) {
       res.status(400).json({
         error: 'invalid_operation',
-        message: error.message,
+        message: errorMessage,
       });
       return;
     }
@@ -223,17 +226,16 @@ export async function cancelSubscription(req: Request, res: Response): Promise<v
     res.json({
       success: true,
       data: { subscription },
-      message: cancelAtPeriodEnd 
-        ? '订阅将在当前计费周期结束时取消' 
-        : '订阅已立即取消',
+      message: cancelAtPeriodEnd ? '订阅将在当前计费周期结束时取消' : '订阅已立即取消',
     });
-  } catch (error: any) {
-    console.error('取消订阅失败:', error);
-    
-    if (error.message.includes('不存在')) {
+  } catch (error: unknown) {
+    logger.error('取消订阅失败:', error);
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('不存在')) {
       res.status(404).json({
         error: 'not_found',
-        message: error.message,
+        message: errorMessage,
       });
       return;
     }
@@ -275,8 +277,8 @@ export async function getSubscription(req: Request, res: Response): Promise<void
         features: getTierFeatures(subscription.productKey, subscription.tier),
       },
     });
-  } catch (error: any) {
-    console.error('获取订阅详情失败:', error);
+  } catch (error: unknown) {
+    logger.error('获取订阅详情失败:', error);
     res.status(500).json({
       error: 'server_error',
       message: '获取订阅详情失败',
@@ -327,8 +329,8 @@ export async function getOrganizationSubscription(req: Request, res: Response): 
         isActive: await subscriptionService.isSubscriptionActive(organizationId, productKey),
       },
     });
-  } catch (error: any) {
-    console.error('获取组织订阅失败:', error);
+  } catch (error: unknown) {
+    logger.error('获取组织订阅失败:', error);
     res.status(500).json({
       error: 'server_error',
       message: '获取组织订阅失败',
@@ -361,8 +363,8 @@ export async function getOrganizationSubscriptions(req: Request, res: Response):
         tiers: subscriptionTiers,
       },
     });
-  } catch (error: any) {
-    console.error('获取组织订阅列表失败:', error);
+  } catch (error: unknown) {
+    logger.error('获取组织订阅列表失败:', error);
     res.status(500).json({
       error: 'server_error',
       message: '获取组织订阅列表失败',
@@ -434,8 +436,8 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
         message: hasAccess ? '有权限' : '当前套餐不支持该功能',
       },
     });
-  } catch (error: any) {
-    console.error('检查功能权限失败:', error);
+  } catch (error: unknown) {
+    logger.error('检查功能权限失败:', error);
     res.status(500).json({
       error: 'server_error',
       message: '检查功能权限失败',
@@ -470,10 +472,7 @@ export async function getPricing(req: Request, res: Response): Promise<void> {
         productKey,
         active: true,
       },
-      orderBy: [
-        { tier: 'asc' },
-        { billingCycle: 'asc' },
-      ],
+      orderBy: [{ tier: 'asc' }, { billingCycle: 'asc' }],
     });
 
     // 组织价格数据
@@ -488,17 +487,19 @@ export async function getPricing(req: Request, res: Response): Promise<void> {
       } else {
         const monthlyPrice = prices.find(p => p.tier === tier && p.billingCycle === 'monthly');
         const yearlyPrice = prices.find(p => p.tier === tier && p.billingCycle === 'yearly');
-        
+
         acc[tier] = {
           ...tierInfo,
-          monthlyPrice: monthlyPrice ? monthlyPrice.amount / 100 : (tierInfo as any).monthlyPrice || 0,
-          yearlyPrice: yearlyPrice ? yearlyPrice.amount / 100 : (tierInfo as any).yearlyPrice || 0,
+          monthlyPrice: monthlyPrice
+            ? monthlyPrice.amount / 100
+            : (tierInfo as { monthlyPrice?: number }).monthlyPrice ?? 0,
+          yearlyPrice: yearlyPrice ? yearlyPrice.amount / 100 : (tierInfo as { yearlyPrice?: number }).yearlyPrice ?? 0,
           features: getTierFeatures(productKey, tier),
         };
       }
-      
+
       return acc;
-    }, {} as any);
+    }, {} as Record<string, unknown>);
 
     res.json({
       success: true,
@@ -509,8 +510,8 @@ export async function getPricing(req: Request, res: Response): Promise<void> {
         trialPeriodDays: 30,
       },
     });
-  } catch (error: any) {
-    console.error('获取套餐定价失败:', error);
+  } catch (error: unknown) {
+    logger.error('获取套餐定价失败:', error);
     res.status(500).json({
       error: 'server_error',
       message: '获取套餐定价失败',

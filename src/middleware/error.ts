@@ -1,8 +1,18 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
+import { logger } from '../utils/logger.js';
+
+interface ErrorWithCode {
+  code?: string;
+  meta?: { target?: string };
+  message?: string;
+  type?: string;
+  errors?: unknown[];
+  name?: string;
+}
 
 // 全局错误处理中间件
-export function errorHandler(error: any, req: Request, res: Response, next: NextFunction): void {
-  console.error('未处理的错误:', error);
+export function errorHandler(error: ErrorWithCode, _req: Request, res: Response): void {
+  logger.error('未处理的错误', { error: error.message ?? String(error) });
 
   // Prisma错误处理
   if (error.code?.startsWith('P')) {
@@ -11,7 +21,7 @@ export function errorHandler(error: any, req: Request, res: Response, next: Next
         res.status(409).json({
           error: 'conflict',
           message: '数据已存在',
-          detail: error.meta?.target || '唯一约束冲突',
+          detail: error.meta?.target ?? '唯一约束冲突',
         });
         return;
       case 'P2025':
@@ -39,7 +49,7 @@ export function errorHandler(error: any, req: Request, res: Response, next: Next
   if (error.type?.startsWith('Stripe')) {
     res.status(400).json({
       error: 'stripe_error',
-      message: error.message || 'Stripe操作失败',
+      message: error instanceof Error ? error.message : String(error) ?? 'Stripe操作失败',
       code: error.code,
     });
     return;

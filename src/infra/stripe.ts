@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { service } from '../config/config.js';
+import { logger } from '../utils/logger.js';
 
 // 初始化Stripe客户端
 export const stripe = new Stripe(service.stripe.secretKey, {
@@ -36,9 +37,20 @@ export class StripeService {
       const customer = await this.stripe.customers.retrieve(customerId);
       return customer.deleted ? null : customer;
     } catch (error) {
-      console.error('获取Stripe客户失败:', error);
+      logger.error('获取Stripe客户失败:', error);
       return null;
     }
+  }
+
+  // 更新客户
+  async updateCustomer(
+    customerId: string,
+    params: {
+      name?: string;
+      email?: string;
+    }
+  ): Promise<Stripe.Customer> {
+    return await this.stripe.customers.update(customerId, params);
   }
 
   // 创建订阅
@@ -72,7 +84,7 @@ export class StripeService {
     try {
       return await this.stripe.subscriptions.retrieve(subscriptionId);
     } catch (error) {
-      console.error('获取Stripe订阅失败:', error);
+      logger.error('获取Stripe订阅失败:', error);
       return null;
     }
   }
@@ -123,7 +135,7 @@ export class StripeService {
     try {
       return await this.stripe.prices.retrieve(priceId);
     } catch (error) {
-      console.error('获取Stripe价格失败:', error);
+      logger.error('获取Stripe价格失败:', error);
       return null;
     }
   }
@@ -137,18 +149,14 @@ export class StripeService {
       });
       return subscriptions.data;
     } catch (error) {
-      console.error('获取客户订阅列表失败:', error);
+      logger.error('获取客户订阅列表失败:', error);
       return [];
     }
   }
 
   // 验证webhook签名
   verifyWebhookSignature(payload: string, signature: string): Stripe.Event {
-    return this.stripe.webhooks.constructEvent(
-      payload,
-      signature,
-      service.stripe.webhookSecret
-    );
+    return this.stripe.webhooks.constructEvent(payload, signature, service.stripe.webhookSecret);
   }
 
   // 创建计费门户会话
