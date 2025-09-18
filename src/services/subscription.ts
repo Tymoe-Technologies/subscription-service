@@ -2,6 +2,7 @@ import { prisma } from '../infra/prisma.js';
 import { stripeService } from '../infra/stripe.js';
 import { cacheService } from '../infra/redis.js';
 import { organizationService } from './organization.js';
+import { authServiceClient } from './authService.js';
 import { service } from '../config/config.js';
 import { logger } from '../utils/logger.js';
 import type { Subscription, Organization } from '@prisma/client';
@@ -39,6 +40,60 @@ export interface SubscriptionWithDetails extends Subscription {
 }
 
 export class SubscriptionService {
+  // 检查用户是否有权限访问组织
+  async checkUserOrganizationAccess(userId: string, organizationId: string): Promise<boolean> {
+    try {
+      // 使用auth-service检查用户组织访问权限
+      return await authServiceClient.checkUserOrganizationAccess(userId, organizationId);
+    } catch (error) {
+      logger.error('检查用户组织访问权限失败', {
+        userId,
+        organizationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  }
+
+  // 获取组织的活跃订阅（优先选择最高级别的订阅）
+  async getActiveSubscription(organizationId: string, productKey?: string): Promise<Subscription | null> {
+    try {
+      const where: any = {
+        organizationId,
+        status: { in: ['active', 'trialing'] },
+      };
+
+      if (productKey) {
+        where.productKey = productKey;
+      }
+
+      const subscriptions = await prisma.subscription.findMany({
+        where,
+        orderBy: [
+          // 按订阅等级排序，pro > advanced > standard > basic > trial
+          { tier: 'desc' },
+          { createdAt: 'desc' },
+        ],
+      });
+
+      // 检查订阅是否真的活跃（未过期）
+      for (const subscription of subscriptions) {
+        if (await this.isSubscriptionActive(organizationId, subscription.productKey)) {
+          return subscription;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      logger.error('获取活跃订阅失败', {
+        organizationId,
+        productKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
   // 创建试用订阅
   async createTrialSubscription(params: CreateTrialSubscriptionParams): Promise<Subscription> {
     const { organizationId, productKey } = params;

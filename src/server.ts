@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { checkDatabaseHealth, closeDatabaseConnection } from './infra/prisma.js';
 import { createRedisClient, closeRedisConnection } from './infra/redis.js';
+import { schedulerService } from './services/scheduler.js';
 import { logger } from './utils/logger.js';
 
 export async function startServer(port: number): Promise<void> {
@@ -23,6 +24,9 @@ export async function startServer(port: number): Promise<void> {
   // 创建Express应用
   const app = createApp();
 
+  // 启动调度器
+  schedulerService.start();
+
   // 启动服务器
   const server = app.listen(port, () => {
     logger.info(`订阅服务启动成功`, {
@@ -38,6 +42,9 @@ export async function startServer(port: number): Promise<void> {
     server.close(() => {
       void (async () => {
         logger.info('HTTP服务器已关闭');
+
+        // 停止调度器
+        schedulerService.stop();
 
         try {
           await closeDatabaseConnection();

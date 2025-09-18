@@ -18,7 +18,7 @@ async function main() {
 
   } catch (error) {
     logger.error('Failed to start application', {
-      error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
 

@@ -477,6 +477,35 @@ stripe listen --forward-to localhost:8088/api/subscription-service/v1/webhooks/s
 
 ## 🗄️ 数据库架构
 
+### 数据库设计理念
+
+本订阅服务的数据库设计遵循以下核心原则：
+
+#### 1. 数据隔离与安全
+- **组织级隔离**: 所有业务数据都严格按组织ID（organizationId）隔离，确保不同组织之间数据完全独立
+- **用户权限控制**: 通过auth-service验证用户对组织的访问权限，避免越权访问
+- **敏感信息保护**: Stripe相关的敏感信息（如客户ID、订阅ID）单独存储，通过Webhook异步更新
+
+#### 2. 扩展性设计
+- **产品线扩展**: 通过Product表支持多产品线（ploml、mopai），便于未来添加新产品
+- **订阅层级扩展**: 支持5个订阅层级（trial/basic/standard/advanced/pro），可灵活调整功能权限
+- **定价灵活性**: Price表独立管理定价策略，支持不同计费周期和促销活动
+
+#### 3. 业务逻辑完整性
+- **订阅状态管理**: 完整跟踪订阅生命周期（试用→付费→升级→取消）
+- **试用机制**: 通过hasUsedTrial字段确保每个组织只能使用一次试用
+- **计费周期管理**: 精确跟踪订阅的起止时间，支持按需计费
+
+#### 4. 微服务权限控制
+- **使用量统计**: MicroserviceUsage表按时间段（小时/日/月）统计API调用量
+- **并发控制**: ConcurrentRequests表实时跟踪正在进行的请求，实现并发限制
+- **细粒度权限**: 支持不同订阅层级对同一微服务的不同使用限制
+
+#### 5. 数据一致性
+- **外键约束**: 所有关联关系都有明确的外键约束，确保数据完整性
+- **原子操作**: 关键业务操作（如订阅升级）使用数据库事务确保一致性
+- **审计追踪**: 记录所有重要操作的时间戳，便于问题排查和数据分析
+
 ### 核心数据模型
 
 ```prisma
@@ -535,6 +564,32 @@ model Price {
   product       Product        @relation(fields: [productKey], references: [key])
   subscriptions Subscription[]
 }
+
+// 微服务使用量统计表
+model MicroserviceUsage {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  serviceKey     String   @map("service_key")
+  usagePeriod    String   @map("usage_period")  // "2024-01-20-14" | "2024-01-20" | "2024-01"
+  periodType     String   @map("period_type")   // "hourly" | "daily" | "monthly"
+  requestCount   Int      @default(0) @map("request_count")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([organizationId, serviceKey, usagePeriod, periodType], name: "organizationId_serviceKey_usagePeriod_periodType")
+  @@map("microservice_usage")
+}
+
+// 微服务并发请求跟踪表
+model ConcurrentRequests {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  serviceKey     String   @map("service_key")
+  requestId      String   @map("request_id")
+  startedAt      DateTime @default(now()) @map("started_at")
+
+  @@map("concurrent_requests")
+}
 ```
 
 ### 数据关系图
@@ -543,12 +598,38 @@ model Price {
 Organization (店铺)
     ├── hasUsedTrial (是否使用过试用)
     ├── stripeCustomerId (Stripe客户ID)
-    └── Subscription[] (订阅列表)
-            ├── Product (ploml/mopai)
-            ├── tier (套餐等级)
-            ├── status (订阅状态)
-            └── Price (价格配置)
-                    └── Stripe Price (Stripe价格对象)
+    ├── Subscription[] (订阅列表)
+    │       ├── Product (ploml/mopai)
+    │       ├── tier (套餐等级)
+    │       ├── status (订阅状态)
+    │       └── Price (价格配置)
+    │               └── Stripe Price (Stripe价格对象)
+    ├── MicroserviceUsage[] (微服务使用统计)
+    │       ├── serviceKey (服务标识)
+    │       ├── usagePeriod (使用周期)
+    │       ├── periodType (周期类型)
+    │       └── requestCount (请求次数)
+    └── ConcurrentRequests[] (并发请求跟踪)
+            ├── serviceKey (服务标识)
+            ├── requestId (请求ID)
+            └── startedAt (开始时间)
+```
+
+### 数据流设计
+
+#### 1. 订阅数据流
+```
+用户注册 → Organization创建 → 试用订阅 → Stripe支付 → 订阅激活 → 功能权限生效
+```
+
+#### 2. 权限验证数据流
+```
+API请求 → JWT验证 → 组织权限检查 → 订阅状态查询 → 功能权限验证 → 允许/拒绝访问
+```
+
+#### 3. 微服务调用数据流
+```
+微服务请求 → 权限检查 → 使用量统计 → 并发控制 → 请求处理 → 统计更新
 ```
 
 ## ⚡ 功能权限体系
@@ -579,6 +660,204 @@ Organization (店铺)
 | 库存管理 | ❌ | ❌ | ✅ | ✅ | ✅ |
 | 多门店管理 | ❌ | ❌ | ❌ | ✅ | ✅ |
 | 第三方集成 | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+### 微服务权限控制系统
+
+本系统实现了细粒度的微服务访问控制，不同订阅层级可以使用相同的微服务但享有不同的使用限制。
+
+#### 支持的微服务列表
+
+| 微服务 | 描述 | 端点 |
+|--------|------|------|
+| auth_service | 用户认证和权限管理 | https://tymoe.com/api/auth-service |
+| notification_service | 邮件、短信、推送通知 | https://api.tymoe.com/notification-service |
+| storage_service | 图片、文档、视频存储 | https://api.tymoe.com/storage-service |
+| analytics_service | 数据分析和报表生成 | https://api.tymoe.com/analytics-service |
+| ai_service | 智能推荐、自动化处理 | https://api.tymoe.com/ai-service |
+| integration_service | 第三方API集成和数据同步 | https://api.tymoe.com/integration-service |
+| payment_service | 在线支付处理 | https://api.tymoe.com/payment-service |
+
+#### 微服务使用限制对比
+
+##### 认证服务 (auth_service)
+| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
+|----------|-------|-------|----------|----------|-----|
+| 每日请求 | 1,000 | 5,000 | 10,000 | 50,000 | 无限制 |
+| 每小时请求 | 100 | 500 | 1,000 | 5,000 | 无限制 |
+| 并发请求 | - | - | - | - | - |
+
+##### 通知服务 (notification_service)
+| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
+|----------|-------|-------|----------|----------|-----|
+| 每日请求 | 50 | 500 | 2,000 | 10,000 | 无限制 |
+| 每小时请求 | 10 | 50 | 200 | 1,000 | 无限制 |
+| 并发请求 | - | - | - | - | - |
+
+##### 文件存储服务 (storage_service)
+| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
+|----------|-------|-------|----------|----------|-----|
+| 每日请求 | 100 | 1,000 | 5,000 | 20,000 | 无限制 |
+| 每小时请求 | 20 | 100 | 500 | 2,000 | 无限制 |
+| 并发请求 | - | - | - | - | - |
+
+##### 分析服务 (analytics_service)
+| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
+|----------|-------|-------|----------|----------|-----|
+| 访问权限 | ❌ | ❌ | ✅ | ✅ | ✅ |
+| 每日请求 | 0 | 0 | 100 | 1,000 | 无限制 |
+| 每小时请求 | 0 | 0 | 20 | 100 | 无限制 |
+
+##### AI智能服务 (ai_service)
+| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
+|----------|-------|-------|----------|----------|-----|
+| 访问权限 | ❌ | ❌ | ❌ | ✅ | ✅ |
+| 每日请求 | 0 | 0 | 0 | 50 | 500 |
+| 每小时请求 | 0 | 0 | 0 | 10 | 100 |
+
+##### 第三方集成服务 (integration_service)
+| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
+|----------|-------|-------|----------|----------|-----|
+| 访问权限 | ❌ | ❌ | ❌ | ❌ | ✅ |
+| 每日请求 | 0 | 0 | 0 | 0 | 10,000 |
+| 每小时请求 | 0 | 0 | 0 | 0 | 1,000 |
+
+##### 支付服务 (payment_service)
+| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
+|----------|-------|-------|----------|----------|-----|
+| 每日请求 | 10 | 100 | 500 | 2,000 | 无限制 |
+| 每小时请求 | 5 | 20 | 100 | 500 | 无限制 |
+| 并发请求 | - | - | - | - | - |
+
+#### 微服务权限API
+
+##### 1. 检查微服务权限
+**端点**: `POST /microservices/check-permission`
+
+**请求参数**:
+```json
+{
+  "organizationId": "org-123",
+  "serviceKey": "notification_service"
+}
+```
+
+**响应示例（允许访问）**:
+```json
+{
+  "success": true,
+  "data": {
+    "allowed": true,
+    "currentUsage": 45,
+    "limit": 500,
+    "resetTime": "2024-01-21T00:00:00Z",
+    "tier": "basic"
+  }
+}
+```
+
+**响应示例（超出限制）**:
+```json
+{
+  "success": true,
+  "data": {
+    "allowed": false,
+    "reason": "Daily request limit exceeded",
+    "currentUsage": 500,
+    "limit": 500,
+    "resetTime": "2024-01-21T00:00:00Z",
+    "tier": "basic"
+  }
+}
+```
+
+##### 2. 获取组织可访问的微服务
+**端点**: `GET /microservices/accessible/{organizationId}`
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "tier": "standard",
+    "services": [
+      {
+        "serviceKey": "auth_service",
+        "limits": {
+          "dailyRequests": 10000,
+          "hourlyRequests": 1000,
+          "concurrentRequests": 0
+        }
+      },
+      {
+        "serviceKey": "notification_service",
+        "limits": {
+          "dailyRequests": 2000,
+          "hourlyRequests": 200,
+          "concurrentRequests": 0
+        }
+      }
+    ]
+  }
+}
+```
+
+##### 3. 获取微服务使用统计
+**端点**: `GET /microservices/stats/{organizationId}?serviceKey=notification_service`
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "data": {
+    "organizationId": "org-123",
+    "tier": "basic",
+    "usage": [
+      {
+        "serviceKey": "notification_service",
+        "usagePeriod": "2024-01-20",
+        "periodType": "daily",
+        "requestCount": 45
+      },
+      {
+        "serviceKey": "notification_service",
+        "usagePeriod": "2024-01-20-14",
+        "periodType": "hourly",
+        "requestCount": 12
+      }
+    ],
+    "concurrent": [
+      {
+        "serviceKey": "notification_service",
+        "requestId": "req-uuid-123",
+        "startedAt": "2024-01-20T14:30:25Z"
+      }
+    ],
+    "timestamp": "2024-01-20T14:30:30Z"
+  }
+}
+```
+
+#### 微服务权限中间件
+
+本系统提供了`requireMicroservicePermission`中间件，其他微服务可以轻松集成权限控制：
+
+```typescript
+import { requireMicroservicePermission } from '@tymoe/subscription-service-middleware';
+
+// 在路由中使用
+app.get('/api/send-notification',
+  validateUserJWT,
+  requireMicroservicePermission('notification_service'),
+  sendNotificationHandler
+);
+```
+
+#### 使用量统计机制
+
+1. **请求开始**: 创建并发请求记录
+2. **请求处理**: 业务逻辑执行
+3. **请求结束**: 删除并发记录，更新使用量统计
+4. **定期清理**: 清理超时的并发请求记录（1小时）
 
 ### 权限检查逻辑
 

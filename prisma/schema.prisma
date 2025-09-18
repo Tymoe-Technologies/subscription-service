@@ -16,7 +16,9 @@ model Organization {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  subscriptions     Subscription[]
+  subscriptions       Subscription[]
+  microserviceUsage   MicroserviceUsage[]
+  concurrentRequests  ConcurrentRequests[]
 
   @@map("organizations")
 }
@@ -78,4 +80,37 @@ model Price {
 
   @@unique([productKey, tier, billingCycle])
   @@map("prices")
+}
+
+// 微服务使用量跟踪
+model MicroserviceUsage {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  serviceKey     String   @map("service_key") // auth_service, notification_service等
+  usagePeriod    String   @map("usage_period") // "YYYY-MM-DD" (daily) | "YYYY-MM-DD-HH" (hourly) | "YYYY-MM" (monthly)
+  periodType     String   @map("period_type") // "hourly" | "daily" | "monthly"
+  requestCount   Int      @default(0) @map("request_count")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, serviceKey, usagePeriod, periodType])
+  @@index([organizationId, serviceKey, periodType])
+  @@map("microservice_usage")
+}
+
+// 实时并发请求跟踪
+model ConcurrentRequests {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  serviceKey     String   @map("service_key")
+  requestId      String   @map("request_id") // 唯一标识每个请求
+  startedAt      DateTime @default(now()) @map("started_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, serviceKey, requestId])
+  @@index([organizationId, serviceKey])
+  @@map("concurrent_requests")
 }

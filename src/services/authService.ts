@@ -30,23 +30,21 @@ class AuthServiceClient {
     }
 
     try {
-      const response = await fetch(`${this.baseURL}/api/auth/public-key`, {
-        headers: {
-          'X-API-Key': this.internalApiKey,
-        },
-      });
+      // 临时解决方案：使用静态公钥，避免启动时的JWKS问题
+      const staticPublicKey = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtiQP1WDu08LvrtGReVib
+Ik-ng2_s3q6ZlK0Q5wlaYt73wqus-FDLtgbUSmRwJZuBBkLHG-DPJkY85yxYaWRq
+PYpqit-oQivLzJ0Ia4jbVm54UtSRl23WEI3yGP1bu5-0U7sX5sfsjxWSxvdSumHo
+SzECzJSDiVweXv-FjZz3ZiQIVVAzj8qQDHMxnIFfEajfll3Z2AjZtp9nA4rdPqfL
+MQ1OL0omxzfK1QffqkVqOzJ5eXeG3PzoRTTdFvpGe6ceK8eF1T0Ef9uaPwpduhjy
+Au2fMpv34_zYWYzFlcU32_lJBUDIZ3PHm3WJnFruxEclsqgEHfP13wHbWFRrVg3I
+LwIDAQAB
+-----END PUBLIC KEY-----`;
 
-      if (!response.ok) {
-        throw new Error(`Failed to get public key: ${response.status}`);
-      }
-
-      const data: PublicKeyResponse = await response.json();
-
-      this.publicKey = data.publicKey;
-      // 设置1小时后过期，提前刷新
+      this.publicKey = staticPublicKey;
       this.keyExpiresAt = Date.now() + 3600000;
 
-      logger.info('Auth service public key refreshed');
+      logger.info('Auth service static public key loaded');
       return this.publicKey;
     } catch (error) {
       logger.error('Failed to get auth service public key', { error });

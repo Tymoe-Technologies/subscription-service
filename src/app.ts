@@ -9,6 +9,7 @@ import subscriptionRoutes from './routes/subscription.js';
 import organizationRoutes from './routes/organization.js';
 import webhookRoutes from './routes/webhook.js';
 import frontendRoutes from './routes/frontend.js';
+import microserviceRoutes from './routes/microservice.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -45,6 +46,9 @@ export function createApp(): express.Application {
 
   // API路由 - 前端调用（需要用户JWT）
   app.use('/api/subscription-service/v1', frontendRoutes);
+
+  // 微服务权限管理路由
+  app.use('/api/subscription-service/v1/microservices', microserviceRoutes);
 
   // 404处理
   app.use(notFoundHandler);
