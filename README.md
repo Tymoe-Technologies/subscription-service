@@ -357,257 +357,742 @@ model AuditLog {
 
 ## 📖 API文档
 
-### 用户API（需要JWT认证）
+### 🎯 前端用户API（需要JWT认证）
 
-#### 1. 同步组织信息
+基础路径：`/api/frontend`
+
+所有前端API需要JWT Bearer Token认证：
 ```bash
-POST /organizations/sync
 Authorization: Bearer {jwt_token}
-
-# 从JWT payload中获取组织信息并同步到本地数据库
 ```
 
-#### 2. 创建Trial订阅
+#### 用户组织管理
+
+##### 获取用户所有组织概览
 ```bash
-POST /subscriptions
-Authorization: Bearer {jwt_token}
-Content-Type: application/json
-
-{
-  "organizationId": "org-123",
-  "productId": "ploml-trial"
-}
-
-# 响应：创建的trial订阅信息
+GET /api/frontend/user/organizations-overview
 ```
 
-#### 3. 使用量统计查询
-```bash
-GET /usage/stats?serviceKey=test-service&periodType=daily&startPeriod=2024-09-01&endPeriod=2024-09-30
-Authorization: Bearer {jwt_token}
+**功能**：获取当前用户拥有的所有组织及其订阅状态概览
 
-# 响应：使用量统计数据
+**成功响应 (200)**：
+```json
 {
   "success": true,
   "data": {
-    "usage": [
+    "organizations": [
       {
-        "id": "usage-123",
-        "serviceKey": "test-service",
-        "usagePeriod": "2024-09-25",
-        "requestCount": 150,
-        "subscription": {
-          "id": "sub-123",
-          "productKey": "test-product",
-          "status": "active"
-        }
+        "id": "org-123",
+        "name": "我的店铺",
+        "subscriptions": [
+          {
+            "productKey": "ploml",
+            "status": "ACTIVE",
+            "tier": "basic",
+            "features": ["基础功能1", "基础功能2"],
+            "isActive": true
+          }
+        ]
       }
-    ],
-    "total": 1
+    ]
   }
 }
 ```
 
-#### 4. 按服务聚合使用量
-```bash
-GET /usage/by-service?periodType=daily&startPeriod=2024-09-01&endPeriod=2024-09-30
-Authorization: Bearer {jwt_token}
-
-# 响应：按服务聚合的使用量数据
+**错误响应 (401)**：
+```json
 {
-  "success": true,
-  "data": [
-    {
-      "serviceKey": "test-service",
-      "totalRequests": 5420,
-      "recordCount": 30
-    }
-  ]
+  "error": "unauthorized",
+  "message": "Invalid or missing JWT token"
 }
 ```
 
-#### 5. 使用量趋势分析
+##### 创建新组织
 ```bash
-GET /usage/trends?serviceKey=test-service&periodType=daily&limit=30
-Authorization: Bearer {jwt_token}
+POST /api/frontend/user/organizations
+Content-Type: application/json
+```
 
-# 响应：时间序列使用量趋势
+**请求体**：
+```json
 {
-  "success": true,
-  "data": [
-    {
-      "usagePeriod": "2024-09-01",
-      "requestCount": 120,
-      "createdAt": "2024-09-01T10:00:00Z"
-    }
-  ]
+  "name": "新店铺名称",
+  "email": "shop@example.com"
 }
 ```
 
-#### 6. 当前周期使用量
-```bash
-GET /usage/current/test-service?periodType=daily
-Authorization: Bearer {jwt_token}
-
-# 响应：当前周期的使用量
+**成功响应 (201)**：
+```json
 {
   "success": true,
   "data": {
-    "currentPeriod": "2024-09-25",
-    "requestCount": 150,
-    "lastUpdated": "2024-09-25T14:30:00Z"
+    "id": "org-456",
+    "name": "新店铺名称",
+    "stripeCustomerId": "cus_stripe123",
+    "hasUsedTrial": false
   }
 }
 ```
 
-#### 3. 创建Intent（付费订阅）
-```bash
-POST /subscriptions/intent
-Authorization: Bearer {jwt_token}
-Content-Type: application/json
+#### 产品信息查询
 
+##### 获取产品定价
+```bash
+GET /api/frontend/products/{productKey}/pricing
+```
+
+**路径参数**：
+- `productKey`: `ploml` | `mopai`
+
+**成功响应 (200)**：
+```json
 {
-  "organizationId": "org-123",
-  "productId": "ploml-basic",
-  "actionType": "checkout",
-  "targetTier": "basic",
-  "targetBillingCycle": "monthly",
-  "successUrl": "https://app.com/success",
-  "cancelUrl": "https://app.com/cancel",
-  "idempotencyKey": "unique-key"
+  "success": true,
+  "data": {
+    "productKey": "ploml",
+    "tiers": {
+      "trial": {
+        "name": "试用版",
+        "monthlyPrice": 0,
+        "yearlyPrice": 0,
+        "features": ["试用功能1", "试用功能2"]
+      },
+      "basic": {
+        "name": "基础版",
+        "monthlyPrice": 29,
+        "yearlyPrice": 290,
+        "features": ["基础功能1", "基础功能2"]
+      }
+    },
+    "currency": "CAD",
+    "trialPeriodDays": 30
+  }
 }
-
-# 响应：{ checkoutUrl, sessionId, intentId }
 ```
 
-#### 4. 获取订阅信息
+##### 获取产品功能列表
 ```bash
-GET /subscriptions/{id}
-Authorization: Bearer {jwt_token}
-
-# 响应：订阅详情，包含产品信息
+GET /api/frontend/products/{productKey}/features
 ```
 
-### Intent API（需要JWT认证）
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "productKey": "ploml",
+    "features": {
+      "trial": ["试用功能1", "试用功能2"],
+      "basic": ["基础功能1", "基础功能2", "基础功能3"],
+      "standard": ["基础功能1", "基础功能2", "标准功能1"]
+    }
+  }
+}
+```
 
-#### 1. 创建Intent
+#### 组织订阅管理
+
+需要组织访问权限验证。
+
+##### 获取组织订阅状态
 ```bash
-POST /intents
-Authorization: Bearer {jwt_token}
+GET /api/frontend/organizations/{organizationId}/subscription-status
+```
+
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "subscriptions": [
+      {
+        "productKey": "ploml",
+        "status": "ACTIVE",
+        "tier": "basic",
+        "currentPeriodEnd": "2024-12-25T00:00:00Z",
+        "features": ["基础功能1", "基础功能2"],
+        "isActive": true
+      }
+    ]
+  }
+}
+```
+
+##### 检查功能权限
+```bash
+GET /api/frontend/organizations/{organizationId}/products/{productKey}/features/{featureKey}/access
+```
+
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "hasAccess": true,
+    "tier": "basic",
+    "reason": "granted"
+  }
+}
+```
+
+**无权限响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "hasAccess": false,
+    "tier": "basic",
+    "reason": "tier_restriction",
+    "message": "Current plan does not support this feature"
+  }
+}
+```
+
+#### 订阅操作
+
+##### 开始试用
+```bash
+POST /api/frontend/organizations/{organizationId}/subscriptions/start-trial
 Content-Type: application/json
+```
 
+**请求体**：
+```json
+{
+  "productKey": "ploml"
+}
+```
+
+**成功响应 (201)**：
+```json
+{
+  "success": true,
+  "data": {
+    "subscription": {
+      "id": "sub-123",
+      "productKey": "ploml",
+      "status": "TRIALING",
+      "tier": "trial",
+      "trialEnd": "2024-10-25T00:00:00Z"
+    },
+    "trialPeriodDays": 30,
+    "features": ["试用功能1", "试用功能2"]
+  }
+}
+```
+
+**错误响应 (409)**：
+```json
+{
+  "error": "conflict",
+  "message": "已经使用过试用期"
+}
+```
+
+##### 创建支付会话
+```bash
+POST /api/frontend/organizations/{organizationId}/subscriptions/checkout
+Content-Type: application/json
+```
+
+**请求体**：
+```json
+{
+  "productKey": "ploml",
+  "tier": "basic",
+  "billingCycle": "monthly",
+  "successUrl": "https://app.com/success",
+  "cancelUrl": "https://app.com/cancel"
+}
+```
+
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "checkoutUrl": "https://checkout.stripe.com/pay/cs_test_123"
+  }
+}
+```
+
+##### 升级订阅
+```bash
+POST /api/frontend/organizations/{organizationId}/subscriptions/upgrade
+Content-Type: application/json
+```
+
+**请求体**：
+```json
+{
+  "subscriptionId": "sub-123",
+  "newTier": "standard",
+  "billingCycle": "monthly"
+}
+```
+
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "subscription": {
+      "id": "sub-123",
+      "tier": "standard",
+      "status": "ACTIVE"
+    },
+    "features": ["基础功能1", "基础功能2", "标准功能1"]
+  }
+}
+```
+
+##### 取消订阅
+```bash
+POST /api/frontend/organizations/{organizationId}/subscriptions/cancel
+Content-Type: application/json
+```
+
+**请求体**：
+```json
+{
+  "subscriptionId": "sub-123",
+  "cancelAtPeriodEnd": true
+}
+```
+
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "subscription": {
+      "id": "sub-123",
+      "status": "ACTIVE",
+      "cancelAtPeriodEnd": true
+    }
+  },
+  "message": "Subscription will be canceled at the end of current billing period"
+}
+```
+
+---
+
+### 🔧 内部订阅API（需要内部API Key）
+
+基础路径：`/api/subscriptions`
+
+所有内部API需要内部API密钥：
+```bash
+X-Internal-API-Key: {internal_api_key}
+```
+
+#### 试用订阅管理
+
+##### 创建试用订阅
+```bash
+POST /api/subscriptions/trial
+Content-Type: application/json
+```
+
+**请求体**：
+```json
 {
   "organizationId": "org-123",
   "productKey": "ploml",
-  "actionType": "checkout",
-  "targetTier": "basic",
-  "metadata": {}
+  "userId": "user-456"
 }
 ```
 
-#### 2. 获取Intent
-```bash
-GET /intents/{intentId}
-Authorization: Bearer {jwt_token}
-```
-
-#### 3. 获取待处理Intent
-```bash
-GET /intents/pending?organizationId=org-123
-Authorization: Bearer {jwt_token}
-```
-
-### Admin API（需要API Key）
-
-⚠️ **重要警告**：Admin API仅限维护/修复用途，生产环境禁止直接使用该接口创建付费订阅。所有调用必须写入AuditLog。
-
-所有Admin API需要设置维护模式并提供API密钥：
-
-```bash
-# 环境变量
-ADMIN_MAINTENANCE_MODE=true
-
-# 请求头
-X-API-Key: your-internal-api-key
-```
-
-#### 组织管理
-```bash
-# 创建组织
-POST /admin/organizations
-X-API-Key: {api_key}
-
-# 获取组织
-GET /admin/organizations/{id}
-X-API-Key: {api_key}
-
-# 更新组织
-PATCH /admin/organizations/{id}
-X-API-Key: {api_key}
-```
-
-#### 订阅管理
-```bash
-# 创建订阅 (仅维护模式)
-POST /admin/subscriptions
-X-API-Key: {api_key}
-
-⚠️ **注意**: 此接口仅用于运维修复，生产环境默认禁用，必须开启 ADMIN_MAINTENANCE_MODE 并提供 INTERNAL_API_KEY，且所有调用会写入审计日志。
-
-# 更新订阅状态
-PATCH /admin/subscriptions/{id}/status
-X-API-Key: {api_key}
-```
-
-### 内部API（需要内部API Key认证）
-
-#### 使用量记录
-```bash
-POST /usage/record
-X-Internal-API-Key: {internal_api_key}
-Content-Type: application/json
-
-{
-  "organizationId": "org-123",
-  "subscriptionId": "sub-123",
-  "serviceKey": "test-service",
-  "usagePeriod": "2024-09-25",
-  "periodType": "daily",
-  "requestCount": 5
-}
-
-# 响应：记录使用量成功
+**成功响应 (201)**：
+```json
 {
   "success": true,
   "data": {
-    "id": "usage-123",
-    "organizationId": "org-123",
-    "subscriptionId": "sub-123",
-    "serviceKey": "test-service",
-    "usagePeriod": "2024-09-25",
-    "periodType": "daily",
-    "requestCount": 5,
-    "createdAt": "2024-09-25T10:30:00Z",
-    "updatedAt": "2024-09-25T10:30:00Z"
+    "subscription": {
+      "id": "sub-123",
+      "organizationId": "org-123",
+      "productKey": "ploml",
+      "status": "TRIALING",
+      "tier": "trial",
+      "trialEnd": "2024-10-25T00:00:00Z"
+    },
+    "trialPeriodDays": 30,
+    "features": ["试用功能1", "试用功能2"]
   }
 }
 ```
 
-### Webhook API
+#### 付费订阅管理
+
+##### 创建付费订阅
+```bash
+POST /api/subscriptions/paid
+Content-Type: application/json
+```
+
+**请求体**：
+```json
+{
+  "organizationId": "org-123",
+  "productKey": "ploml",
+  "tier": "basic",
+  "billingCycle": "monthly",
+  "successUrl": "https://app.com/success",
+  "cancelUrl": "https://app.com/cancel"
+}
+```
+
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "checkoutUrl": "https://checkout.stripe.com/pay/cs_test_123"
+  }
+}
+```
+
+##### 升级订阅
+```bash
+PATCH /api/subscriptions/{subscriptionId}/upgrade
+Content-Type: application/json
+```
+
+**请求体**：
+```json
+{
+  "newTier": "standard",
+  "billingCycle": "yearly"
+}
+```
+
+##### 取消订阅
+```bash
+PATCH /api/subscriptions/{subscriptionId}/cancel
+Content-Type: application/json
+```
+
+**请求体**：
+```json
+{
+  "cancelAtPeriodEnd": true
+}
+```
+
+#### 订阅查询
+
+##### 获取订阅详情
+```bash
+GET /api/subscriptions/{subscriptionId}
+```
+
+##### 获取组织特定产品订阅
+```bash
+GET /api/subscriptions/organization/{organizationId}/product/{productKey}
+```
+
+##### 获取组织所有订阅
+```bash
+GET /api/subscriptions/organization/{organizationId}
+```
+
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "subscriptions": [
+      {
+        "id": "sub-123",
+        "productKey": "ploml",
+        "status": "ACTIVE",
+        "tier": "basic"
+      }
+    ],
+    "summary": {
+      "activeCount": 1,
+      "trialingCount": 0,
+      "totalValue": 29
+    },
+    "availableProducts": ["ploml", "mopai"],
+    "tiers": {
+      "basic": { "name": "基础版", "monthlyPrice": 29 }
+    }
+  }
+}
+```
+
+##### 检查功能权限
+```bash
+GET /api/subscriptions/organization/{organizationId}/product/{productKey}/feature/{featureKey}
+```
+
+##### 获取产品定价
+```bash
+GET /api/subscriptions/pricing/{productKey}
+```
+
+---
+
+### 🔍 微服务权限API（需要JWT认证）
+
+基础路径：`/api/microservices`
+
+#### 权限检查
+
+##### 检查微服务权限
+```bash
+POST /api/microservices/check-permission
+Content-Type: application/json
+Authorization: Bearer {jwt_token}
+```
+
+**请求体**：
+```json
+{
+  "organizationId": "org-123",
+  "serviceKey": "auth-service"
+}
+```
+
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "allowed": true,
+    "reason": "granted",
+    "currentUsage": 150,
+    "limit": 1000,
+    "resetTime": "2024-10-01T00:00:00Z",
+    "tier": "basic"
+  }
+}
+```
+
+**权限不足响应 (403)**：
+```json
+{
+  "error": "no_active_subscription",
+  "message": "This organization does not have a valid subscription"
+}
+```
+
+#### 微服务访问管理
+
+##### 获取可访问的微服务列表
+```bash
+GET /api/microservices/accessible/{organizationId}
+Authorization: Bearer {jwt_token}
+```
+
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "tier": "basic",
+    "services": [
+      {
+        "serviceKey": "auth-service",
+        "limits": {
+          "enabled": true,
+          "hourlyRequests": 1000,
+          "dailyRequests": 10000,
+          "concurrentRequests": 10
+        }
+      }
+    ]
+  }
+}
+```
+
+##### 获取微服务使用统计
+```bash
+GET /api/microservices/stats/{organizationId}?serviceKey=auth-service&periodType=daily
+Authorization: Bearer {jwt_token}
+```
+
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "data": {
+    "organizationId": "org-123",
+    "tier": "basic",
+    "usage": [
+      {
+        "serviceKey": "auth-service",
+        "usagePeriod": "2024-09-25",
+        "requestCount": 150
+      }
+    ],
+    "concurrent": [],
+    "timestamp": "2024-09-25T10:30:00Z"
+  }
+}
+```
+
+##### 获取微服务使用情况
+```bash
+GET /api/microservices/usage/{organizationId}
+Authorization: Bearer {jwt_token}
+```
+
+##### 清理过期并发请求记录
+```bash
+POST /api/microservices/cleanup-expired
+```
+
+**成功响应 (200)**：
+```json
+{
+  "success": true,
+  "message": "Cleanup completed"
+}
+```
+
+---
+
+### 🔗 Webhook API
 
 #### Stripe Webhook
 ```bash
-POST /webhooks/stripe
+POST /api/webhooks/stripe
 Content-Type: application/json
-Stripe-Signature: {signature}
+Stripe-Signature: {stripe_signature}
+```
 
-# 处理的事件类型：
-# - checkout.session.completed
-# - customer.subscription.created
-# - customer.subscription.updated
-# - customer.subscription.deleted
-# - invoice.payment_succeeded
-# - invoice.payment_failed
+**功能**：处理Stripe webhook事件，更新本地订阅状态
+
+**处理的事件类型**：
+- `checkout.session.completed` - 支付会话完成
+- `customer.subscription.created` - 订阅创建
+- `customer.subscription.updated` - 订阅更新
+- `customer.subscription.deleted` - 订阅删除
+- `invoice.payment_succeeded` - 支付成功
+- `invoice.payment_failed` - 支付失败
+
+**成功响应 (200)**：
+```json
+{
+  "received": true
+}
+```
+
+**错误响应 (400)**：
+```json
+{
+  "error": "Invalid signature"
+}
+```
+
+---
+
+### 🛡️ Admin API（需要API Key + 维护模式）
+
+基础路径：`/api/admin`
+
+⚠️ **重要警告**：Admin API仅限维护/修复用途，生产环境需要维护模式和API密钥。
+
+**认证要求**：
+```bash
+X-API-Key: {internal_api_key}
+# 环境变量: ADMIN_MAINTENANCE_MODE=true
+```
+
+#### 组织管理
+
+##### 创建组织
+```bash
+POST /api/admin/organizations
+X-API-Key: {api_key}
+Content-Type: application/json
+```
+
+##### 获取组织
+```bash
+GET /api/admin/organizations/{organizationId}
+X-API-Key: {api_key}
+```
+
+##### 更新组织
+```bash
+PATCH /api/admin/organizations/{organizationId}
+X-API-Key: {api_key}
+Content-Type: application/json
+```
+
+#### 订阅管理
+
+##### 创建订阅（仅维护模式）
+```bash
+POST /api/admin/subscriptions
+X-API-Key: {api_key}
+Content-Type: application/json
+```
+
+⚠️ **注意**：此接口仅用于运维修复，所有调用会写入审计日志。
+
+##### 更新订阅状态
+```bash
+PATCH /api/admin/subscriptions/{subscriptionId}/status
+X-API-Key: {api_key}
+Content-Type: application/json
+```
+
+---
+
+### 📊 通用错误响应格式
+
+所有API遵循统一的错误响应格式：
+
+#### 400 Bad Request
+```json
+{
+  "error": "bad_request",
+  "message": "Missing required parameters: organizationId, productKey"
+}
+```
+
+#### 401 Unauthorized
+```json
+{
+  "error": "unauthorized",
+  "message": "Invalid or missing JWT token"
+}
+```
+
+#### 403 Forbidden
+```json
+{
+  "error": "organization_access_denied",
+  "message": "No permission to access this organization"
+}
+```
+
+#### 404 Not Found
+```json
+{
+  "error": "not_found",
+  "message": "Subscription not found"
+}
+```
+
+#### 409 Conflict
+```json
+{
+  "error": "conflict",
+  "message": "Organization already has ploml product subscription"
+}
+```
+
+#### 500 Internal Server Error
+```json
+{
+  "error": "server_error",
+  "message": "Failed to create subscription"
+}
 ```
 
 ## 🔒 认证与安全
