@@ -3,7 +3,9 @@ import {
   getOrganizationSubscriptionStatus,
   checkFeatureAccess,
   getProductPricing,
+  getProductFeatures,
   getUserOrganizationsOverview,
+  createUserOrganization,
   startTrial,
   createCheckoutSession,
   upgradeUserSubscription,
@@ -21,8 +23,14 @@ router.use(asyncHandler(validateUserJWT));
 // 获取用户的所有组织概览（不需要特定组织权限）
 router.get('/user/organizations-overview', asyncHandler(getUserOrganizationsOverview));
 
+// 创建新组织（用户选择新增店铺时）
+router.post('/user/organizations', asyncHandler(createUserOrganization));
+
 // 获取产品定价信息（不需要组织权限）
 router.get('/products/:productKey/pricing', asyncHandler(getProductPricing));
+
+// 获取产品功能列表（用于前端展示不同等级的功能）
+router.get('/products/:productKey/features', asyncHandler(getProductFeatures));
 
 // 以下路由需要组织权限验证
 router.use('/organizations/:organizationId', asyncHandler(validateOrganizationAccess));

@@ -7,12 +7,12 @@ import { logger } from '../utils/logger.js';
 // 创建试用订阅
 export async function createTrialSubscription(req: Request, res: Response): Promise<void> {
   try {
-    const { organizationId, productKey } = req.body;
+    const { organizationId, productKey, userId } = req.body;
 
-    if (!organizationId || !productKey) {
+    if (!organizationId || !productKey || !userId) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'organizationId 和 productKey 是必需的',
+        message: 'organizationId, productKey, and userId are required',
       });
       return;
     }
@@ -20,7 +20,7 @@ export async function createTrialSubscription(req: Request, res: Response): Prom
     if (!['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
-        message: '产品类型必须是 ploml 或 mopai',
+        message: 'Product type must be ploml or mopai',
       });
       return;
     }
@@ -28,6 +28,7 @@ export async function createTrialSubscription(req: Request, res: Response): Prom
     const subscription = await subscriptionService.createTrialSubscription({
       organizationId,
       productKey,
+      userId,
     });
 
     res.status(201).json({
@@ -39,7 +40,7 @@ export async function createTrialSubscription(req: Request, res: Response): Prom
       },
     });
   } catch (error: unknown) {
-    logger.error('创建试用订阅失败:', error);
+    logger.error('Failed to create trial subscription:', error);
 
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('已经使用过试用期') || errorMessage.includes('已有')) {
@@ -52,7 +53,7 @@ export async function createTrialSubscription(req: Request, res: Response): Prom
 
     res.status(500).json({
       error: 'server_error',
-      message: '创建试用订阅失败',
+      message: 'Failed to create trial subscription',
     });
   }
 }
@@ -65,7 +66,7 @@ export async function createPaidSubscription(req: Request, res: Response): Promi
     if (!organizationId || !productKey || !tier || !billingCycle || !successUrl || !cancelUrl) {
       res.status(400).json({
         error: 'bad_request',
-        message: '缺少必需参数',
+        message: 'Missing required parameters',
       });
       return;
     }
@@ -73,7 +74,7 @@ export async function createPaidSubscription(req: Request, res: Response): Promi
     if (!['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
-        message: '产品类型必须是 ploml 或 mopai',
+        message: 'Product type must be ploml or mopai',
       });
       return;
     }
@@ -81,7 +82,7 @@ export async function createPaidSubscription(req: Request, res: Response): Promi
     if (!['basic', 'standard', 'advanced', 'pro'].includes(tier)) {
       res.status(400).json({
         error: 'invalid_tier',
-        message: '套餐类型必须是 basic, standard, advanced 或 pro',
+        message: 'Tier must be basic, standard, advanced or pro',
       });
       return;
     }
@@ -89,7 +90,7 @@ export async function createPaidSubscription(req: Request, res: Response): Promi
     if (!['monthly', 'yearly'].includes(billingCycle)) {
       res.status(400).json({
         error: 'invalid_billing_cycle',
-        message: '计费周期必须是 monthly 或 yearly',
+        message: 'Billing cycle must be monthly or yearly',
       });
       return;
     }
@@ -108,7 +109,7 @@ export async function createPaidSubscription(req: Request, res: Response): Promi
       data: result,
     });
   } catch (error: unknown) {
-    logger.error('创建付费订阅失败:', error);
+    logger.error('Failed to create paid subscription:', error);
 
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('不存在') || errorMessage.includes('找不到')) {
@@ -121,7 +122,7 @@ export async function createPaidSubscription(req: Request, res: Response): Promi
 
     res.status(500).json({
       error: 'server_error',
-      message: '创建付费订阅失败',
+      message: 'Failed to create paid subscription',
     });
   }
 }
@@ -135,7 +136,7 @@ export async function upgradeSubscription(req: Request, res: Response): Promise<
     if (!subscriptionId) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'subscriptionId 是必需的',
+        message: 'subscriptionId is required',
       });
       return;
     }
@@ -143,7 +144,7 @@ export async function upgradeSubscription(req: Request, res: Response): Promise<
     if (!newTier) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'newTier 是必需的',
+        message: 'newTier is required',
       });
       return;
     }
@@ -151,7 +152,7 @@ export async function upgradeSubscription(req: Request, res: Response): Promise<
     if (!['basic', 'standard', 'advanced', 'pro'].includes(newTier)) {
       res.status(400).json({
         error: 'invalid_tier',
-        message: '套餐类型必须是 basic, standard, advanced 或 pro',
+        message: 'Tier must be basic, standard, advanced or pro',
       });
       return;
     }
@@ -159,7 +160,7 @@ export async function upgradeSubscription(req: Request, res: Response): Promise<
     if (billingCycle && !['monthly', 'yearly'].includes(billingCycle)) {
       res.status(400).json({
         error: 'invalid_billing_cycle',
-        message: '计费周期必须是 monthly 或 yearly',
+        message: 'Billing cycle must be monthly or yearly',
       });
       return;
     }
@@ -178,7 +179,7 @@ export async function upgradeSubscription(req: Request, res: Response): Promise<
       },
     });
   } catch (error: unknown) {
-    logger.error('升级订阅失败:', error);
+    logger.error('Failed to upgrade subscription:', error);
 
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('不存在') || errorMessage.includes('找不到')) {
@@ -199,7 +200,7 @@ export async function upgradeSubscription(req: Request, res: Response): Promise<
 
     res.status(500).json({
       error: 'server_error',
-      message: '升级订阅失败',
+      message: 'Failed to upgrade subscription',
     });
   }
 }
@@ -213,7 +214,7 @@ export async function cancelSubscription(req: Request, res: Response): Promise<v
     if (!subscriptionId) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'subscriptionId 是必需的',
+        message: 'subscriptionId is required',
       });
       return;
     }
@@ -226,10 +227,10 @@ export async function cancelSubscription(req: Request, res: Response): Promise<v
     res.json({
       success: true,
       data: { subscription },
-      message: cancelAtPeriodEnd ? '订阅将在当前计费周期结束时取消' : '订阅已立即取消',
+      message: cancelAtPeriodEnd ? 'Subscription will be canceled at the end of current billing period' : 'Subscription canceled immediately',
     });
   } catch (error: unknown) {
-    logger.error('取消订阅失败:', error);
+    logger.error('Failed to cancel subscription:', error);
 
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('不存在')) {
@@ -242,7 +243,7 @@ export async function cancelSubscription(req: Request, res: Response): Promise<v
 
     res.status(500).json({
       error: 'server_error',
-      message: '取消订阅失败',
+      message: 'Failed to cancel subscription',
     });
   }
 }
@@ -255,7 +256,7 @@ export async function getSubscription(req: Request, res: Response): Promise<void
     if (!subscriptionId) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'subscriptionId 是必需的',
+        message: 'subscriptionId is required',
       });
       return;
     }
@@ -265,7 +266,7 @@ export async function getSubscription(req: Request, res: Response): Promise<void
     if (!subscription) {
       res.status(404).json({
         error: 'not_found',
-        message: '订阅不存在',
+        message: 'Subscription not found',
       });
       return;
     }
@@ -274,14 +275,14 @@ export async function getSubscription(req: Request, res: Response): Promise<void
       success: true,
       data: {
         subscription,
-        features: getTierFeatures(subscription.productKey, subscription.tier),
+        features: getTierFeatures(subscription.productKey, subscription.tier || 'basic'),
       },
     });
   } catch (error: unknown) {
-    logger.error('获取订阅详情失败:', error);
+    logger.error('Failed to get subscription details:', error);
     res.status(500).json({
       error: 'server_error',
-      message: '获取订阅详情失败',
+      message: 'Failed to get subscription details',
     });
   }
 }
@@ -295,7 +296,7 @@ export async function getOrganizationSubscription(req: Request, res: Response): 
     if (!organizationId || !productKey) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'organizationId 和 productKey 是必需的',
+        message: 'organizationId and productKey are required',
       });
       return;
     }
@@ -303,7 +304,7 @@ export async function getOrganizationSubscription(req: Request, res: Response): 
     if (!['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
-        message: '产品类型必须是 ploml 或 mopai',
+        message: 'Product type must be ploml or mopai',
       });
       return;
     }
@@ -316,7 +317,7 @@ export async function getOrganizationSubscription(req: Request, res: Response): 
     if (!subscription) {
       res.status(404).json({
         error: 'not_found',
-        message: '订阅不存在',
+        message: 'Subscription not found',
       });
       return;
     }
@@ -325,15 +326,15 @@ export async function getOrganizationSubscription(req: Request, res: Response): 
       success: true,
       data: {
         subscription,
-        features: getTierFeatures(productKey, subscription.tier),
+        features: getTierFeatures(productKey, subscription.tier || 'basic'),
         isActive: await subscriptionService.isSubscriptionActive(organizationId, productKey),
       },
     });
   } catch (error: unknown) {
-    logger.error('获取组织订阅失败:', error);
+    logger.error('Failed to get organization subscription:', error);
     res.status(500).json({
       error: 'server_error',
-      message: '获取组织订阅失败',
+      message: 'Failed to get organization subscription',
     });
   }
 }
@@ -346,7 +347,7 @@ export async function getOrganizationSubscriptions(req: Request, res: Response):
     if (!organizationId) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'organizationId 是必需的',
+        message: 'organizationId is required',
       });
       return;
     }
@@ -364,10 +365,10 @@ export async function getOrganizationSubscriptions(req: Request, res: Response):
       },
     });
   } catch (error: unknown) {
-    logger.error('获取组织订阅列表失败:', error);
+    logger.error('Failed to get organization subscriptions:', error);
     res.status(500).json({
       error: 'server_error',
-      message: '获取组织订阅列表失败',
+      message: 'Failed to get organization subscriptions',
     });
   }
 }
@@ -382,7 +383,7 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
     if (!organizationId || !productKey || !featureKey) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'organizationId, productKey 和 featureKey 是必需的',
+        message: 'organizationId, productKey and featureKey are required',
       });
       return;
     }
@@ -390,7 +391,7 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
     if (!['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
-        message: '产品类型必须是 ploml 或 mopai',
+        message: 'Product type must be ploml or mopai',
       });
       return;
     }
@@ -406,7 +407,7 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
         data: {
           hasAccess: false,
           reason: 'no_subscription',
-          message: '没有订阅',
+          message: 'No subscription',
         },
       });
       return;
@@ -419,13 +420,13 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
         data: {
           hasAccess: false,
           reason: 'subscription_inactive',
-          message: '订阅不活跃',
+          message: 'Subscription inactive',
         },
       });
       return;
     }
 
-    const hasAccess = hasFeatureAccess(productKey, subscription.tier, featureKey);
+    const hasAccess = hasFeatureAccess(productKey, subscription.tier || 'basic', featureKey);
 
     res.json({
       success: true,
@@ -433,14 +434,14 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
         hasAccess,
         tier: subscription.tier,
         reason: hasAccess ? 'granted' : 'tier_restriction',
-        message: hasAccess ? '有权限' : '当前套餐不支持该功能',
+        message: hasAccess ? 'Access granted' : 'Current plan does not support this feature',
       },
     });
   } catch (error: unknown) {
-    logger.error('检查功能权限失败:', error);
+    logger.error('Failed to check feature access:', error);
     res.status(500).json({
       error: 'server_error',
-      message: '检查功能权限失败',
+      message: 'Failed to check feature access',
     });
   }
 }
@@ -453,7 +454,7 @@ export async function getPricing(req: Request, res: Response): Promise<void> {
     if (!productKey) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'productKey 是必需的',
+        message: 'productKey is required',
       });
       return;
     }
@@ -461,7 +462,7 @@ export async function getPricing(req: Request, res: Response): Promise<void> {
     if (!['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
-        message: '产品类型必须是 ploml 或 mopai',
+        message: 'Product type must be ploml or mopai',
       });
       return;
     }
@@ -491,9 +492,9 @@ export async function getPricing(req: Request, res: Response): Promise<void> {
         acc[tier] = {
           ...tierInfo,
           monthlyPrice: monthlyPrice
-            ? monthlyPrice.amount / 100
+            ? (monthlyPrice.amount || 0) / 100
             : (tierInfo as { monthlyPrice?: number }).monthlyPrice ?? 0,
-          yearlyPrice: yearlyPrice ? yearlyPrice.amount / 100 : (tierInfo as { yearlyPrice?: number }).yearlyPrice ?? 0,
+          yearlyPrice: yearlyPrice ? (yearlyPrice.amount || 0) / 100 : (tierInfo as { yearlyPrice?: number }).yearlyPrice ?? 0,
           features: getTierFeatures(productKey, tier),
         };
       }
@@ -511,10 +512,10 @@ export async function getPricing(req: Request, res: Response): Promise<void> {
       },
     });
   } catch (error: unknown) {
-    logger.error('获取套餐定价失败:', error);
+    logger.error('Failed to get pricing:', error);
     res.status(500).json({
       error: 'server_error',
-      message: '获取套餐定价失败',
+      message: 'Failed to get pricing',
     });
   }
 }

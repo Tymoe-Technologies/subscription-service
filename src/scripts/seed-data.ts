@@ -155,15 +155,10 @@ async function main() {
   for (const price of priceData) {
     await prisma.price.upsert({
       where: {
-        productKey_tier_billingCycle: {
-          productKey: price.productKey,
-          tier: price.tier,
-          billingCycle: price.billingCycle,
-        },
+        stripePriceId: price.stripePriceId,
       },
       update: {
         amount: price.amount,
-        stripePriceId: price.stripePriceId,
         active: true,
       },
       create: price,

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { organizationService } from '../services/organization.js';
+import { subscriptionService } from '../services/subscription.js';
 import { logger } from '../utils/logger.js';
 import { getTierFeatures } from '../config/features.js';
 
@@ -11,7 +12,7 @@ export async function createOrganization(req: Request, res: Response): Promise<v
     if (!id || !name || !email) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'id, name 和 email 是必需的',
+        message: 'id, name and email are required',
       });
       return;
     }
@@ -27,7 +28,7 @@ export async function createOrganization(req: Request, res: Response): Promise<v
       data: { organization },
     });
   } catch (error: unknown) {
-    logger.error('创建组织失败:', error);
+    logger.error('Failed to create organization:', error);
 
     if (error instanceof Error ? error.message : String(error).includes('已存在')) {
       res.status(409).json({
@@ -39,7 +40,7 @@ export async function createOrganization(req: Request, res: Response): Promise<v
 
     res.status(500).json({
       error: 'server_error',
-      message: '创建组织失败',
+      message: 'Failed to create organization',
     });
   }
 }
@@ -52,7 +53,7 @@ export async function getOrganization(req: Request, res: Response): Promise<void
     if (!organizationId) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'organizationId 是必需的',
+        message: 'organizationId is required',
       });
       return;
     }
@@ -62,7 +63,7 @@ export async function getOrganization(req: Request, res: Response): Promise<void
     if (!organization) {
       res.status(404).json({
         error: 'not_found',
-        message: '组织不存在',
+        message: 'Organization not found',
       });
       return;
     }
@@ -72,10 +73,10 @@ export async function getOrganization(req: Request, res: Response): Promise<void
       data: { organization },
     });
   } catch (error: unknown) {
-    logger.error('获取组织信息失败:', error);
+    logger.error('Failed to get organization:', error);
     res.status(500).json({
       error: 'server_error',
-      message: '获取组织信息失败',
+      message: 'Failed to get organization',
     });
   }
 }
@@ -88,7 +89,7 @@ export async function getOrganizationWithSubscriptions(req: Request, res: Respon
     if (!organizationId) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'organizationId 是必需的',
+        message: 'organizationId is required',
       });
       return;
     }
@@ -98,7 +99,7 @@ export async function getOrganizationWithSubscriptions(req: Request, res: Respon
     if (!organization) {
       res.status(404).json({
         error: 'not_found',
-        message: '组织不存在',
+        message: 'Organization not found',
       });
       return;
     }
@@ -108,7 +109,7 @@ export async function getOrganizationWithSubscriptions(req: Request, res: Respon
       ...organization,
       subscriptions: organization.subscriptions.map(subscription => ({
         ...subscription,
-        features: getTierFeatures(subscription.productKey, subscription.tier),
+        features: getTierFeatures(subscription.productKey, subscription.tier || 'basic'),
         isActive: ['active', 'trialing'].includes(subscription.status),
       })),
     };
@@ -118,10 +119,10 @@ export async function getOrganizationWithSubscriptions(req: Request, res: Respon
       data: { organization: enrichedOrganization },
     });
   } catch (error: unknown) {
-    logger.error('获取组织订阅信息失败:', error);
+    logger.error('Failed to get organization subscriptions:', error);
     res.status(500).json({
       error: 'server_error',
-      message: '获取组织订阅信息失败',
+      message: 'Failed to get organization subscriptions',
     });
   }
 }
@@ -134,7 +135,7 @@ export async function getOrganizationCacheInfo(req: Request, res: Response): Pro
     if (!organizationId) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'organizationId 是必需的',
+        message: 'organizationId is required',
       });
       return;
     }
@@ -144,7 +145,7 @@ export async function getOrganizationCacheInfo(req: Request, res: Response): Pro
     if (!organization) {
       res.status(404).json({
         error: 'not_found',
-        message: '组织不存在',
+        message: 'Organization not found',
       });
       return;
     }
@@ -166,7 +167,7 @@ export async function getOrganizationCacheInfo(req: Request, res: Response): Pro
         expiresAt: subscription.currentPeriodEnd ?? subscription.trialEnd,
         isActive: ['active', 'trialing'].includes(subscription.status),
         billingCycle: subscription.billingCycle,
-        features: getTierFeatures(subscription.productKey, subscription.tier),
+        features: getTierFeatures(subscription.productKey, subscription.tier || 'basic'),
       };
     }
 
@@ -183,7 +184,7 @@ export async function getOrganizationCacheInfo(req: Request, res: Response): Pro
       };
     }
 
-    const cacheValidUntil = new Date(Date.now() + 10 * 60 * 1000); // 10分钟后过期
+    const cacheValidUntil = new Date(Date.now() + 10 * 60 * 1000); // Expires after 10 minutes
 
     res.json({
       success: true,
@@ -195,10 +196,10 @@ export async function getOrganizationCacheInfo(req: Request, res: Response): Pro
       },
     });
   } catch (error: unknown) {
-    logger.error('获取组织缓存信息失败:', error);
+    logger.error('Failed to get organization cache info:', error);
     res.status(500).json({
       error: 'server_error',
-      message: '获取组织缓存信息失败',
+      message: 'Failed to get organization cache info',
     });
   }
 }
@@ -212,7 +213,7 @@ export async function updateOrganization(req: Request, res: Response): Promise<v
     if (!organizationId) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'organizationId 是必需的',
+        message: 'organizationId is required',
       });
       return;
     }
@@ -220,7 +221,7 @@ export async function updateOrganization(req: Request, res: Response): Promise<v
     if (!name) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'name 是必需的',
+        message: 'name is required',
       });
       return;
     }
@@ -234,20 +235,20 @@ export async function updateOrganization(req: Request, res: Response): Promise<v
       data: { organization },
     });
   } catch (error: unknown) {
-    logger.error('更新组织信息失败:', error);
+    logger.error('Failed to update organization:', error);
 
     // Prisma错误处理
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2025') {
       res.status(404).json({
         error: 'not_found',
-        message: '组织不存在',
+        message: 'Organization not found',
       });
       return;
     }
 
     res.status(500).json({
       error: 'server_error',
-      message: '更新组织信息失败',
+      message: 'Failed to update organization',
     });
   }
 }
@@ -260,7 +261,7 @@ export async function getTrialStatus(req: Request, res: Response): Promise<void>
     if (!organizationId) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'organizationId 是必需的',
+        message: 'organizationId is required',
       });
       return;
     }
@@ -270,7 +271,7 @@ export async function getTrialStatus(req: Request, res: Response): Promise<void>
     if (!organization) {
       res.status(404).json({
         error: 'not_found',
-        message: '组织不存在',
+        message: 'Organization not found',
       });
       return;
     }
@@ -284,10 +285,10 @@ export async function getTrialStatus(req: Request, res: Response): Promise<void>
       },
     });
   } catch (error: unknown) {
-    logger.error('获取试用状态失败:', error);
+    logger.error('Failed to get trial status:', error);
     res.status(500).json({
       error: 'server_error',
-      message: '获取试用状态失败',
+      message: 'Failed to get trial status',
     });
   }
 }
@@ -300,7 +301,7 @@ export async function deleteOrganization(req: Request, res: Response): Promise<v
     if (!organizationId) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'organizationId 是必需的',
+        message: 'organizationId is required',
       });
       return;
     }
@@ -309,13 +310,13 @@ export async function deleteOrganization(req: Request, res: Response): Promise<v
 
     res.json({
       success: true,
-      message: '组织已删除，所有相关订阅已取消',
+      message: 'Organization deleted, all related subscriptions canceled',
     });
   } catch (error: unknown) {
-    logger.error('删除组织失败:', error);
+    logger.error('Failed to delete organization:', error);
     res.status(500).json({
       error: 'server_error',
-      message: '删除组织失败',
+      message: 'Failed to delete organization',
     });
   }
 }
@@ -329,7 +330,7 @@ export async function listOrganizations(req: Request, res: Response): Promise<vo
     if (page < 1 || limit < 1 || limit > 100) {
       res.status(400).json({
         error: 'bad_request',
-        message: '页码必须大于0，每页数量必须在1-100之间',
+        message: 'Page number must be greater than 0, items per page must be between 1-100',
       });
       return;
     }
@@ -341,10 +342,46 @@ export async function listOrganizations(req: Request, res: Response): Promise<vo
       data: result,
     });
   } catch (error: unknown) {
-    logger.error('获取组织列表失败:', error);
+    logger.error('Failed to get organizations list:', error);
     res.status(500).json({
       error: 'server_error',
-      message: '获取组织列表失败',
+      message: 'Failed to get organizations list',
+    });
+  }
+}
+
+// 获取组织的功能权限配置
+export async function getOrganizationFeatures(req: Request, res: Response): Promise<void> {
+  try {
+    const { organizationId } = req.params;
+
+    if (!organizationId) {
+      res.status(400).json({
+        error: 'bad_request',
+        message: 'organizationId is required',
+      });
+      return;
+    }
+
+    const features = await subscriptionService.getOrganizationFeatures(organizationId);
+
+    if (!features) {
+      res.status(404).json({
+        error: 'not_found',
+        message: 'No active subscription found for organization or features not configured',
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: features,
+    });
+  } catch (error: unknown) {
+    logger.error('Failed to get organization features:', error);
+    res.status(500).json({
+      error: 'server_error',
+      message: 'Failed to get organization features',
     });
   }
 }

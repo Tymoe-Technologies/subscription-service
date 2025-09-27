@@ -20,6 +20,7 @@ const envSchema = z.object({
   // 内部API认证
   INTERNAL_API_KEY: z.string().min(1, 'INTERNAL_API_KEY is required'),
 
+
   // 日志配置
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
 

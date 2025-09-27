@@ -12,6 +12,10 @@ interface OrganizationAccessResponse {
   role?: string;
 }
 
+interface UserOrganizationsResponse {
+  organizations: string[];
+}
+
 class AuthServiceClient {
   private baseURL: string;
   private publicKey: string | null = null;
@@ -81,6 +85,33 @@ LwIDAQAB
         error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error',
       });
       return false;
+    }
+  }
+
+  async getUserOrganizations(userId: string): Promise<string[]> {
+    try {
+      const response = await fetch(
+        `${this.baseURL}/api/users/${userId}/organizations`,
+        {
+          headers: {
+            'X-API-Key': this.internalApiKey,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to get user organizations: ${response.status}`);
+      }
+
+      const data: UserOrganizationsResponse = await response.json();
+      return data.organizations;
+    } catch (error) {
+      logger.error('Failed to get user organizations', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
     }
   }
 }

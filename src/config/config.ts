@@ -32,6 +32,11 @@ export const service = {
     publishableKey: env.STRIPE_PUBLISHABLE_KEY,
   },
 
+  // JWT配置
+  jwt: {
+    jwksUrl: 'https://tymoe.com/jwks.json',
+  },
+
   // 安全配置
   security: {
     internalApiKey: env.INTERNAL_API_KEY,

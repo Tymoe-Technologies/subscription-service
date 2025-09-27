@@ -11,13 +11,13 @@ export class SchedulerService {
       try {
         await microservicePermissionService.cleanupExpiredConcurrentRequests();
       } catch (error) {
-        logger.error('定时清理任务失败', {
+        logger.error('Scheduled cleanup task failed', {
           error: error instanceof Error ? error.message : String(error),
         });
       }
     }, 10 * 60 * 1000); // 10分钟
 
-    logger.info('调度器已启动');
+    logger.info('Scheduler started');
   }
 
   // 停止定时任务
@@ -25,7 +25,7 @@ export class SchedulerService {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
-      logger.info('调度器已停止');
+      logger.info('Scheduler stopped');
     }
   }
 }

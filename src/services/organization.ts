@@ -2,6 +2,7 @@ import { prisma } from '../infra/prisma.js';
 import { stripeService } from '../infra/stripe.js';
 import { cacheService } from '../infra/redis.js';
 import { logger } from '../utils/logger.js';
+import { SUBSCRIPTION_STATUS } from '../constants';
 import type { Organization } from '@prisma/client';
 
 export interface CreateOrganizationParams {
@@ -14,7 +15,7 @@ export interface OrganizationWithSubscriptions extends Organization {
   subscriptions: Array<{
     id: string;
     productKey: string;
-    tier: string;
+    tier: string | null;
     status: string;
     billingCycle: string | null;
     currentPeriodEnd: Date | null;
@@ -31,7 +32,7 @@ export class OrganizationService {
     });
 
     if (existing) {
-      throw new Error(`组织 ${params.id} 已存在`);
+      throw new Error(`Organization ${params.id} already exists`);
     }
 
     // 创建Stripe客户
@@ -56,18 +57,25 @@ export class OrganizationService {
     return organization;
   }
 
-  // 获取组织信息
+  // 获取组织信息（排除已删除的）
   async getOrganization(id: string): Promise<Organization | null> {
     // 先检查缓存
     const cacheKey = `org:${id}`;
     const cached = await cacheService.get<Organization>(cacheKey);
     if (cached) {
+      // 检查是否已被软删除
+      if (cached.deletedAt) {
+        return null;
+      }
       return cached;
     }
 
-    // 从数据库获取
+    // 从数据库获取（排除已删除的）
     const organization = await prisma.organization.findUnique({
-      where: { id },
+      where: {
+        id,
+        deletedAt: null, // 只获取未删除的
+      },
     });
 
     if (organization) {
@@ -89,9 +97,15 @@ export class OrganizationService {
     }
 
     const organization = await prisma.organization.findUnique({
-      where: { id },
+      where: {
+        id,
+        deletedAt: null, // 排除已删除的
+      },
       include: {
         subscriptions: {
+          where: {
+            deletedAt: null, // 排除已删除的订阅
+          },
           select: {
             id: true,
             productKey: true,
@@ -119,7 +133,10 @@ export class OrganizationService {
     data: Partial<Pick<Organization, 'name'>>
   ): Promise<Organization> {
     const organization = await prisma.organization.update({
-      where: { id },
+      where: {
+        id,
+        deletedAt: null, // 只更新未删除的
+      },
       data,
     });
 
@@ -130,7 +147,7 @@ export class OrganizationService {
           name: data.name,
         });
       } catch (error) {
-        logger.error('更新Stripe客户信息失败:', error);
+        logger.error('Failed to update Stripe customer information:', error);
         // 不抛出错误，继续执行
       }
     }
@@ -175,13 +192,23 @@ export class OrganizationService {
     await this.clearOrganizationCache(id);
   }
 
-  // 删除组织（软删除，实际上是设置为非活跃状态）
+  // 软删除组织（保留数据用于审计）
   async deleteOrganization(id: string): Promise<void> {
-    // 首先取消所有活跃订阅
+    // 首先检查组织是否存在且未被删除
+    const organization = await prisma.organization.findUnique({
+      where: { id, deletedAt: null },
+    });
+
+    if (!organization) {
+      throw new Error('Organization does not exist or has been deleted');
+    }
+
+    // 取消所有活跃订阅
     const activeSubscriptions = await prisma.subscription.findMany({
       where: {
         organizationId: id,
-        status: { in: ['active', 'trialing'] },
+        status: { in: [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.TRIALING] },
+        deletedAt: null,
       },
     });
 
@@ -194,15 +221,28 @@ export class OrganizationService {
         }
       }
 
-      // 更新本地订阅状态
+      // 软删除订阅
       await prisma.subscription.update({
         where: { id: subscription.id },
-        data: { status: 'canceled' },
+        data: {
+          status: SUBSCRIPTION_STATUS.CANCELED,
+          deletedAt: new Date(),
+        },
       });
     }
 
-    // 注意：不删除组织记录，保留用于审计
-    // 在实际应用中，可能需要添加一个 'deleted' 或 'inactive' 状态字段
+    // 软删除组织（设置deletedAt时间戳）
+    await prisma.organization.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+
+    logger.info(`Organization ${id} has been soft deleted`, {
+      organizationId: id,
+      canceledSubscriptions: activeSubscriptions.length,
+    });
 
     // 清除缓存
     await this.clearOrganizationCache(id);

@@ -139,3 +139,43 @@ playwright/.cache/
 test-*.md
 *-temp.md
 *.backup
+.env.example
+
+# Claude AI settings (personal configuration)
+.claude/
+
+# Docker and containerization
+docker-compose.override.yml
+.docker/
+
+# TypeScript incremental compilation
+*.tsbuildinfo
+
+# Test coverage and results
+coverage/
+test-results/
+.nyc_output
+*.lcov
+
+# Backup files
+*.backup
+*.bak
+
+# Prisma generated files (should be regenerated)
+prisma/migrations/*.sql
+generated/
+
+# Lock files (optional - some teams prefer to ignore, others don't)
+# package-lock.json
+# yarn.lock
+
+# Tests directory (if you decide to remove tests)
+/tests/*
+
+# Test configuration (if not needed for small projects)
+jest.config.js
+
+# Personal deployment scripts (if not used by team)
+scripts/deploy.sh
+
+.env.example

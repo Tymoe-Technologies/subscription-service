@@ -8,6 +8,7 @@ import {
   getTrialStatus,
   deleteOrganization,
   listOrganizations,
+  getOrganizationFeatures,
 } from '../controllers/organization.js';
 import { validateInternalApiKey } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -37,6 +38,9 @@ router.patch('/:organizationId', asyncHandler(updateOrganization));
 
 // 获取试用状态
 router.get('/:organizationId/trial-status', asyncHandler(getTrialStatus));
+
+// 获取组织功能权限配置
+router.get('/:organizationId/features', asyncHandler(getOrganizationFeatures));
 
 // 删除组织
 router.delete('/:organizationId', asyncHandler(deleteOrganization));

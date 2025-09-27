@@ -65,11 +65,38 @@ export function requireMicroservicePermission(serviceKey: string) {
         return;
       }
 
-      // 检查微服务权限
+      // 检查API速率限制功能权限
+      const apiRateLimitCheck = await subscriptionService.checkFeatureLimit(
+        organizationId,
+        'api_rate_limit',
+        await microservicePermissionService.getUsageCount(organizationId, serviceKey, 'hourly')
+      );
+
+      if (!apiRateLimitCheck.hasAccess || !apiRateLimitCheck.isWithinLimit) {
+        const errorResponse: any = {
+          error: 'api_rate_limit_exceeded',
+          message: apiRateLimitCheck.hasAccess
+            ? 'API请求频率超出限制'
+            : '该订阅级别不支持此API',
+        };
+
+        if (apiRateLimitCheck.limit) {
+          errorResponse.usage = {
+            current: apiRateLimitCheck.usage,
+            limit: apiRateLimitCheck.limit,
+            resetTime: microservicePermissionService.getNextHourReset(),
+          };
+        }
+
+        res.status(403).json(errorResponse);
+        return;
+      }
+
+      // 检查微服务权限 (保留原有逻辑作为后备)
       const permissionCheck = await microservicePermissionService.checkPermission(
         organizationId,
         serviceKey,
-        subscription.tier
+        subscription.tier || 'basic'
       );
 
       if (!permissionCheck.allowed) {
@@ -111,7 +138,8 @@ export function requireMicroservicePermission(serviceKey: string) {
         microservicePermissionService.recordRequestEnd(
           organizationId,
           serviceKey,
-          requestId
+          requestId,
+          (req as any).subscriptionId || ''
         ).catch(error => {
           logger.error('Error recording request end in middleware', {
             organizationId,

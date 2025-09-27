@@ -17,7 +17,7 @@ export async function getOrganizationSubscriptionStatus(
     if (!organizationId) {
       res.status(400).json({
         error: 'missing_organization_id',
-        message: '缺少组织ID',
+        message: 'Missing organization ID',
       });
       return;
     }
@@ -27,7 +27,7 @@ export async function getOrganizationSubscriptionStatus(
     if (!organization) {
       res.status(404).json({
         error: 'organization_not_found',
-        message: '店铺不存在',
+        message: 'Store not found',
       });
       return;
     }
@@ -48,12 +48,12 @@ export async function getOrganizationSubscriptionStatus(
         currentPeriodEnd: sub.currentPeriodEnd,
         trialEnd: sub.trialEnd,
         cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
-        features: getTierFeatures(sub.productKey, sub.tier),
+        features: getTierFeatures(sub.productKey, sub.tier || 'basic'),
       })),
       lastUpdated: new Date().toISOString(),
     };
 
-    logger.info('获取组织订阅状态成功', {
+    logger.info('Successfully retrieved organization subscription status', {
       userId,
       organizationId,
       subscriptionCount: subscriptions.length,
@@ -64,7 +64,7 @@ export async function getOrganizationSubscriptionStatus(
       data: subscriptionStatus,
     });
   } catch (error) {
-    logger.error('获取组织订阅状态失败', {
+    logger.error('Failed to get organization subscription status', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user.id,
       error: error instanceof Error ? error.message : String(error),
@@ -72,7 +72,7 @@ export async function getOrganizationSubscriptionStatus(
 
     res.status(500).json({
       error: 'server_error',
-      message: '获取订阅状态失败',
+      message: 'Failed to get subscription status',
     });
   }
 }
@@ -86,7 +86,7 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
     if (!organizationId || !productKey || !featureKey) {
       res.status(400).json({
         error: 'missing_parameters',
-        message: '缺少必要参数',
+        message: 'Missing required parameters',
       });
       return;
     }
@@ -94,7 +94,7 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
     if (!['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
-        message: '无效的产品类型',
+        message: 'Invalid product type',
       });
       return;
     }
@@ -109,11 +109,11 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
     let currentTier = 'none';
 
     if (subscription && ['trialing', 'active'].includes(subscription.status)) {
-      currentTier = subscription.tier;
-      hasAccess = hasFeatureAccess(productKey, subscription.tier, featureKey);
+      currentTier = subscription.tier || 'basic';
+      hasAccess = hasFeatureAccess(productKey, subscription.tier || 'basic', featureKey);
     }
 
-    logger.debug('功能权限检查', {
+    logger.debug('Feature access check', {
       userId,
       organizationId,
       productKey,
@@ -132,7 +132,7 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
       },
     });
   } catch (error) {
-    logger.error('功能权限检查失败', {
+    logger.error('Feature access check failed', {
       organizationId: req.params.organizationId,
       productKey: req.params.productKey,
       featureKey: req.params.featureKey,
@@ -142,7 +142,7 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
 
     res.status(500).json({
       error: 'server_error',
-      message: '权限检查失败',
+      message: 'Permission check failed',
     });
   }
 }
@@ -156,7 +156,7 @@ export function getProductPricing(req: Request, res: Response): void {
     if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
-        message: '无效的产品类型',
+        message: 'Invalid product type',
       });
       return;
     }
@@ -164,7 +164,7 @@ export function getProductPricing(req: Request, res: Response): void {
     // 暂时返回空的定价信息，因为subscriptionService还没有getProductPricing方法
     const pricing: unknown[] = [];
 
-    logger.debug('获取产品定价', {
+    logger.debug('Get product pricing', {
       userId,
       productKey,
       pricingCount: pricing.length,
@@ -178,7 +178,7 @@ export function getProductPricing(req: Request, res: Response): void {
       },
     });
   } catch (error) {
-    logger.error('获取产品定价失败', {
+    logger.error('Failed to get product pricing', {
       productKey: req.params.productKey,
       userId: (req as AuthenticatedRequest).user.id,
       error: error instanceof Error ? error.message : String(error),
@@ -186,7 +186,7 @@ export function getProductPricing(req: Request, res: Response): void {
 
     res.status(500).json({
       error: 'server_error',
-      message: '获取定价信息失败',
+      message: 'Failed to get pricing information',
     });
   }
 }
@@ -200,20 +200,20 @@ export function getUserOrganizationsOverview(req: Request, res: Response): void 
 
     res.json({
       success: true,
-      message: '此功能需要配合auth-service实现',
+      message: 'This feature needs to be implemented with auth-service',
       data: {
         organizations: [],
       },
     });
   } catch (error) {
-    logger.error('获取用户组织概览失败', {
+    logger.error('Failed to get user organizations overview', {
       userId: (req as AuthenticatedRequest).user.id,
       error: error instanceof Error ? error.message : String(error),
     });
 
     res.status(500).json({
       error: 'server_error',
-      message: '获取组织概览失败',
+      message: 'Failed to get organizations overview',
     });
   }
 }
@@ -230,7 +230,7 @@ export async function startTrial(req: Request, res: Response): Promise<void> {
     if (!organizationId) {
       res.status(400).json({
         error: 'missing_organization_id',
-        message: '缺少组织ID',
+        message: 'Missing organization ID',
       });
       return;
     }
@@ -238,7 +238,7 @@ export async function startTrial(req: Request, res: Response): Promise<void> {
     if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
-        message: '产品类型必须是 ploml 或 mopai',
+        message: 'Product type must be ploml or mopai',
       });
       return;
     }
@@ -246,9 +246,10 @@ export async function startTrial(req: Request, res: Response): Promise<void> {
     const subscription = await subscriptionService.createTrialSubscription({
       organizationId,
       productKey,
+      userId,
     });
 
-    logger.info('用户开始试用', {
+    logger.info('User started trial', {
       userId,
       organizationId,
       productKey,
@@ -261,11 +262,11 @@ export async function startTrial(req: Request, res: Response): Promise<void> {
         subscription,
         trialPeriodDays: 30,
         features: getTierFeatures(productKey, 'trial'),
-        message: '试用已开始，享受30天免费体验！',
+        message: 'Trial started, enjoy 30 days of free access!',
       },
     });
   } catch (error) {
-    logger.error('开始试用失败', {
+    logger.error('Failed to start trial', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user.id,
       error: error instanceof Error ? error.message : String(error),
@@ -283,7 +284,7 @@ export async function startTrial(req: Request, res: Response): Promise<void> {
 
     res.status(500).json({
       error: 'server_error',
-      message: '开始试用失败',
+      message: 'Failed to start trial',
     });
   }
 }
@@ -298,7 +299,7 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
     if (!organizationId) {
       res.status(400).json({
         error: 'missing_organization_id',
-        message: '缺少组织ID',
+        message: 'Missing organization ID',
       });
       return;
     }
@@ -306,7 +307,7 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
     if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
-        message: '产品类型必须是 ploml 或 mopai',
+        message: 'Product type must be ploml or mopai',
       });
       return;
     }
@@ -314,7 +315,7 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
     if (!tier || !['basic', 'standard', 'advanced', 'pro'].includes(tier)) {
       res.status(400).json({
         error: 'invalid_tier',
-        message: '套餐类型必须是 basic, standard, advanced 或 pro',
+        message: 'Tier must be basic, standard, advanced or pro',
       });
       return;
     }
@@ -322,7 +323,7 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
     if (!billingCycle || !['monthly', 'yearly'].includes(billingCycle)) {
       res.status(400).json({
         error: 'invalid_billing_cycle',
-        message: '计费周期必须是 monthly 或 yearly',
+        message: 'Billing cycle must be monthly or yearly',
       });
       return;
     }
@@ -330,7 +331,7 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
     if (!successUrl || !cancelUrl) {
       res.status(400).json({
         error: 'missing_urls',
-        message: '缺少支付成功或取消的回调URL',
+        message: 'Missing payment success or cancel callback URLs',
       });
       return;
     }
@@ -344,7 +345,7 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
       cancelUrl,
     });
 
-    logger.info('创建支付会话', {
+    logger.info('Creating payment session', {
       userId,
       organizationId,
       productKey,
@@ -356,11 +357,11 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
       success: true,
       data: {
         checkoutUrl: result.checkoutUrl,
-        message: '请完成支付以激活订阅',
+        message: 'Please complete payment to activate subscription',
       },
     });
   } catch (error) {
-    logger.error('创建支付会话失败', {
+    logger.error('Failed to create payment session', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user.id,
       error: error instanceof Error ? error.message : String(error),
@@ -368,7 +369,7 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
 
     res.status(500).json({
       error: 'server_error',
-      message: '创建支付会话失败',
+      message: 'Failed to create payment session',
     });
   }
 }
@@ -383,7 +384,7 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
     if (!organizationId) {
       res.status(400).json({
         error: 'missing_organization_id',
-        message: '缺少组织ID',
+        message: 'Missing organization ID',
       });
       return;
     }
@@ -391,7 +392,7 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
     if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
-        message: '产品类型必须是 ploml 或 mopai',
+        message: 'Product type must be ploml or mopai',
       });
       return;
     }
@@ -399,7 +400,7 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
     if (!newTier || !['basic', 'standard', 'advanced', 'pro'].includes(newTier)) {
       res.status(400).json({
         error: 'invalid_tier',
-        message: '套餐类型必须是 basic, standard, advanced 或 pro',
+        message: 'Tier must be basic, standard, advanced or pro',
       });
       return;
     }
@@ -413,7 +414,7 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
     if (!currentSubscription) {
       res.status(404).json({
         error: 'subscription_not_found',
-        message: '未找到当前订阅，请先开始试用或订阅',
+        message: 'Current subscription not found, please start trial or subscribe first',
       });
       return;
     }
@@ -437,7 +438,7 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
         data: {
           requiresPayment: true,
           checkoutUrl: result.checkoutUrl,
-          message: '请完成支付以升级订阅',
+          message: 'Please complete payment to upgrade subscription',
         },
       });
       return;
@@ -450,7 +451,7 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
       billingCycle,
     });
 
-    logger.info('用户升级订阅', {
+    logger.info('User upgraded subscription', {
       userId,
       organizationId,
       productKey,
@@ -464,11 +465,11 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
         requiresPayment: false,
         subscription,
         features: getTierFeatures(productKey, newTier),
-        message: '订阅已成功升级！',
+        message: 'Subscription upgraded successfully!',
       },
     });
   } catch (error) {
-    logger.error('升级订阅失败', {
+    logger.error('Failed to upgrade subscription', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user.id,
       error: error instanceof Error ? error.message : String(error),
@@ -476,7 +477,7 @@ export async function upgradeUserSubscription(req: Request, res: Response): Prom
 
     res.status(500).json({
       error: 'server_error',
-      message: '升级订阅失败',
+      message: 'Failed to upgrade subscription',
     });
   }
 }
@@ -491,7 +492,7 @@ export async function cancelUserSubscription(req: Request, res: Response): Promi
     if (!organizationId) {
       res.status(400).json({
         error: 'missing_organization_id',
-        message: '缺少组织ID',
+        message: 'Missing organization ID',
       });
       return;
     }
@@ -499,7 +500,7 @@ export async function cancelUserSubscription(req: Request, res: Response): Promi
     if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
       res.status(400).json({
         error: 'invalid_product',
-        message: '产品类型必须是 ploml 或 mopai',
+        message: 'Product type must be ploml or mopai',
       });
       return;
     }
@@ -513,7 +514,7 @@ export async function cancelUserSubscription(req: Request, res: Response): Promi
     if (!currentSubscription) {
       res.status(404).json({
         error: 'subscription_not_found',
-        message: '未找到订阅',
+        message: 'Subscription not found',
       });
       return;
     }
@@ -523,7 +524,7 @@ export async function cancelUserSubscription(req: Request, res: Response): Promi
       cancelAtPeriodEnd
     );
 
-    logger.info('用户取消订阅', {
+    logger.info('User canceled subscription', {
       userId,
       organizationId,
       productKey,
@@ -535,11 +536,11 @@ export async function cancelUserSubscription(req: Request, res: Response): Promi
       success: true,
       data: { subscription },
       message: cancelAtPeriodEnd
-        ? '订阅将在当前计费周期结束时取消，在此之前您仍可使用所有功能'
-        : '订阅已立即取消',
+        ? 'Subscription will be canceled at the end of current billing period, you can still use all features until then'
+        : 'Subscription canceled immediately',
     });
   } catch (error) {
-    logger.error('取消订阅失败', {
+    logger.error('Failed to cancel subscription', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user.id,
       error: error instanceof Error ? error.message : String(error),
@@ -547,7 +548,96 @@ export async function cancelUserSubscription(req: Request, res: Response): Promi
 
     res.status(500).json({
       error: 'server_error',
-      message: '取消订阅失败',
+      message: 'Failed to cancel subscription',
+    });
+  }
+}
+
+// 创建新组织（用户选择新增店铺时）
+export async function createUserOrganization(req: Request, res: Response): Promise<void> {
+  try {
+    const userId = (req as AuthenticatedRequest).user.id;
+    const { name, email } = req.body;
+
+    if (!name || !email) {
+      res.status(400).json({
+        error: 'missing_required_fields',
+        message: 'Name and email are required',
+      });
+      return;
+    }
+
+    // Create organization with auth-service generated ID
+    const organizationId = `org_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    const organization = await organizationService.createOrganization({
+      id: organizationId,
+      name,
+      email,
+    });
+
+    logger.info('User created organization', {
+      userId,
+      organizationId: organization.id,
+      organizationName: name,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: { organization },
+      message: 'Organization created successfully',
+    });
+  } catch (error) {
+    logger.error('Failed to create organization', {
+      userId: (req as AuthenticatedRequest).user.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    res.status(500).json({
+      error: 'server_error',
+      message: 'Failed to create organization',
+    });
+  }
+}
+
+// 获取产品功能列表（用于前端展示不同等级的功能）
+export async function getProductFeatures(req: Request, res: Response): Promise<void> {
+  try {
+    const { productKey } = req.params;
+
+    if (!productKey || !['ploml', 'mopai'].includes(productKey)) {
+      res.status(400).json({
+        error: 'invalid_product',
+        message: 'Product must be ploml or mopai',
+      });
+      return;
+    }
+
+    // Get features for all tiers of the product
+    const tierFeatures = {
+      trial: getTierFeatures(productKey, 'trial'),
+      basic: getTierFeatures(productKey, 'basic'),
+      standard: getTierFeatures(productKey, 'standard'),
+      advanced: getTierFeatures(productKey, 'advanced'),
+      pro: getTierFeatures(productKey, 'pro'),
+    };
+
+    res.json({
+      success: true,
+      data: {
+        productKey,
+        tiers: tierFeatures,
+      },
+    });
+  } catch (error) {
+    logger.error('Failed to get product features', {
+      productKey: req.params.productKey,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    res.status(500).json({
+      error: 'server_error',
+      message: 'Failed to get product features',
     });
   }
 }

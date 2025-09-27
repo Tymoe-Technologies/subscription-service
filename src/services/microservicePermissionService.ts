@@ -131,49 +131,25 @@ export class MicroservicePermissionService {
     serviceKey: string
   ): Promise<string> {
     const requestId = uuidv4();
-
-    try {
-      await prisma.concurrentRequests.create({
-        data: {
-          organizationId,
-          serviceKey,
-          requestId,
-        },
-      });
-
-      return requestId;
-    } catch (error) {
-      logger.error('Error recording request start', {
-        organizationId,
-        serviceKey,
-        requestId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return requestId;
-    }
+    // TODO: Implement concurrent request tracking when ConcurrentRequests model is added
+    return requestId;
   }
 
   // 记录API调用结束
   async recordRequestEnd(
     organizationId: string,
     serviceKey: string,
-    requestId: string
+    requestId: string,
+    subscriptionId: string
   ): Promise<void> {
     try {
-      // 移除并发请求记录
-      await prisma.concurrentRequests.deleteMany({
-        where: {
-          organizationId,
-          serviceKey,
-          requestId,
-        },
-      });
+      // TODO: Remove concurrent request tracking when ConcurrentRequests model is added
 
       // 增加使用量统计
       await Promise.all([
-        this.incrementUsage(organizationId, serviceKey, 'hourly'),
-        this.incrementUsage(organizationId, serviceKey, 'daily'),
-        this.incrementUsage(organizationId, serviceKey, 'monthly'),
+        this.incrementUsage(organizationId, serviceKey, 'hourly', subscriptionId),
+        this.incrementUsage(organizationId, serviceKey, 'daily', subscriptionId),
+        this.incrementUsage(organizationId, serviceKey, 'monthly', subscriptionId),
       ]);
     } catch (error) {
       logger.error('Error recording request end', {
@@ -190,31 +166,32 @@ export class MicroservicePermissionService {
     organizationId: string,
     serviceKey: string
   ): Promise<number> {
-    return await prisma.concurrentRequests.count({
-      where: {
-        organizationId,
-        serviceKey,
-      },
-    });
+    // TODO: Implement when ConcurrentRequests model is added
+    return 0;
   }
 
   // 获取使用量统计
-  private async getUsageCount(
+  async getUsageCount(
     organizationId: string,
     serviceKey: string,
-    periodType: 'hourly' | 'daily' | 'monthly'
+    periodType: 'hourly' | 'daily' | 'monthly',
+    subscriptionId?: string
   ): Promise<number> {
     const period = this.getCurrentPeriod(periodType);
 
-    const usage = await prisma.microserviceUsage.findUnique({
-      where: {
-        organizationId_serviceKey_usagePeriod_periodType: {
-          organizationId,
-          serviceKey,
-          usagePeriod: period,
-          periodType,
-        },
-      },
+    const where: any = {
+      organizationId,
+      serviceKey,
+      usagePeriod: period,
+      periodType,
+    };
+
+    if (subscriptionId) {
+      where.subscriptionId = subscriptionId;
+    }
+
+    const usage = await prisma.microserviceUsage.findFirst({
+      where,
     });
 
     return usage?.requestCount || 0;
@@ -224,14 +201,15 @@ export class MicroservicePermissionService {
   private async incrementUsage(
     organizationId: string,
     serviceKey: string,
-    periodType: 'hourly' | 'daily' | 'monthly'
+    periodType: 'hourly' | 'daily' | 'monthly',
+    subscriptionId: string
   ): Promise<void> {
     const period = this.getCurrentPeriod(periodType);
 
     await prisma.microserviceUsage.upsert({
       where: {
-        organizationId_serviceKey_usagePeriod_periodType: {
-          organizationId,
+        subscriptionId_serviceKey_usagePeriod_periodType: {
+          subscriptionId,
           serviceKey,
           usagePeriod: period,
           periodType,
@@ -239,6 +217,7 @@ export class MicroservicePermissionService {
       },
       create: {
         organizationId,
+        subscriptionId,
         serviceKey,
         usagePeriod: period,
         periodType,
@@ -273,7 +252,7 @@ export class MicroservicePermissionService {
   }
 
   // 获取下一次重置时间
-  private getNextHourReset(): Date {
+  getNextHourReset(): Date {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0, 0, 0);
   }
@@ -300,14 +279,12 @@ export class MicroservicePermissionService {
       orderBy: [{ serviceKey: 'asc' }, { usagePeriod: 'desc' }],
     });
 
-    const concurrentData = await prisma.concurrentRequests.findMany({
-      where,
-      select: {
-        serviceKey: true,
-        requestId: true,
-        startedAt: true,
-      },
-    });
+    // TODO: Implement when ConcurrentRequests model is added
+    const concurrentData: Array<{
+      serviceKey: string;
+      requestId: string;
+      startedAt: Date;
+    }> = [];
 
     return {
       usage: usageData,
@@ -317,30 +294,8 @@ export class MicroservicePermissionService {
 
   // 清理过期的并发请求记录（清理超过1小时的记录）
   async cleanupExpiredConcurrentRequests(): Promise<{ count: number }> {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-
-    try {
-      const result = await prisma.concurrentRequests.deleteMany({
-        where: {
-          startedAt: {
-            lt: oneHourAgo,
-          },
-        },
-      });
-
-      if (result.count > 0) {
-        logger.info('Cleaned up expired concurrent requests', {
-          count: result.count,
-        });
-      }
-
-      return { count: result.count };
-    } catch (error) {
-      logger.error('Error cleaning up expired concurrent requests', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return { count: 0 };
-    }
+    // TODO: Implement when ConcurrentRequests model is added
+    return { count: 0 };
   }
 }
 

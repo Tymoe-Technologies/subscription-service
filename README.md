@@ -1,119 +1,147 @@
 # Tymoe Subscription Service
 
-> **订阅管理与计费中心** - 基于Stripe的企业级订阅管理服务
+> **企业级订阅管理服务** - 基于Stripe Webhook的SSOT架构，支持Intent-based操作和完整审计追踪
 
-## 🌐 服务概述
+## 🏗️ 架构设计
 
-**服务职责**: Subscription Service 负责管理 Tymoe SaaS 平台的订阅计费、功能权限控制和用户自主订阅管理
-**技术栈**: Node.js + TypeScript + Express + Prisma + Stripe API
-**服务端口**: 8088
-**基础URL**: `http://localhost:8088/api/subscription-service/v1`
+本服务严格按照企业级微服务架构设计，采用**Webhook驱动的单一真相来源（SSOT）**模式：
 
-⚠️ **重要提醒**: 请勿直接修改数据库内容！所有数据操作必须通过API接口进行！
+### 核心设计原则
 
-## 🏢 在Tymoe生态中的位置
+1. **Stripe作为SSOT**: 所有订阅状态变更必须通过Stripe Webhook确认，前端API仅创建Intent
+2. **Intent-based操作**: 防止竞态条件，所有付费操作先创建Intent，Webhook完成后更新状态
+3. **完整审计追踪**: 记录所有系统操作，支持合规和问题排查
+4. **本地Trial管理**: 试用订阅本地管理，每个用户限用一次
+5. **严格权限控制**: Admin操作需要维护模式+API密钥+审计要求
 
-### 服务间关系图
+### 服务职责
+- 订阅生命周期管理（Trial → Paid → Upgrade → Cancel）
+- Stripe支付集成和Webhook处理
+- Intent-based防竞态条件操作
+- 完整的审计日志系统
+- 组织和用户权限管理
+
+## 📁 项目结构
+
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   auth-service  │    │subscription-    │    │  ploml/mopai   │
-│   (用户认证)     │◄──►│   service       │◄──►│   (业务服务)    │
-│   Port: 8087    │    │  (订阅管理)      │    │                │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                         ┌─────────────────┐
-                         │     Stripe      │
-                         │   (支付平台)     │
-                         └─────────────────┘
+/src
+  /config
+    env.ts                     # 环境变量配置和验证
+  /infra
+    prisma.ts                  # Prisma客户端
+  /middleware
+    auth.ts                    # JWKS JWT验证 + 内部API Key验证
+    errorHandler.ts            # 全局错误处理
+  /controllers
+    organization.controller.ts # 组织管理API
+    subscription.controller.ts # 订阅管理API (checkout/upgrade/cancel)
+    webhook.controller.ts      # Stripe Webhook处理
+    microserviceUsage.controller.ts # 使用量记录API
+    admin.controller.ts        # 管理员API (高权限操作)
+  /routes
+    organization.controller.ts # 组织路由
+    subscription.controller.ts # 订阅路由
+    webhook.controller.ts      # Webhook路由
+    microserviceUsage.controller.ts # 使用量路由
+    admin.controller.ts        # 管理员路由
+  /services
+    subscriptionIntent.service.ts   # Intent审计表服务
+    subscription.service.ts         # 订阅业务逻辑
+    organization.service.ts         # 组织管理逻辑
+    webhook.service.ts              # Webhook处理服务
+    microserviceUsage.service.ts    # 使用量记录服务
+    auditService.ts                 # 审计日志服务
+  /types
+    index.ts                   # 统一类型定义和常量
+    subscription.ts            # 订阅相关类型定义
+  /utils
+    logger.ts                  # 结构化日志
+    time.ts                    # 时间工具函数
+  /routes
+    organization.ts            # 组织路由
+    subscription.ts            # 订阅路由
+    intent.ts                  # Intent路由
+    webhook.ts                 # Webhook路由
+  index.ts                     # 服务入口
+  app.ts                       # Express应用配置
 ```
-
-### 职责分工
-
-1. **auth-service**
-   - 用户注册/登录/JWT签发
-   - 店铺(Organization)创建和管理
-   - 用户权限验证
-
-2. **subscription-service** (本服务)
-   - 订阅状态管理
-   - 功能权限验证
-   - Stripe支付集成
-   - 计费周期管理
-
-3. **ploml/mopai-service**
-   - 具体业务功能
-   - 调用subscription-service检查权限
-   - 根据订阅状态提供服务
-
-4. **Stripe**
-   - 支付处理
-   - 订阅计费
-   - Webhook通知
-
-## 📖 目录
-
-- [服务概述](#服务概述)
-- [在Tymoe生态中的位置](#在tymoe生态中的位置)
-- [快速开始](#快速开始)
-- [API接口详解](#api接口详解)
-  - [用户前端API](#用户前端api-需要jwt认证)
-  - [管理员API](#管理员api-需要内部api密钥)
-  - [Webhook接口](#webhook接口)
-- [数据库架构](#数据库架构)
-- [功能权限体系](#功能权限体系)
-- [认证与安全](#认证与安全)
-- [开发指南](#开发指南)
-- [部署运维](#部署运维)
-- [故障排除](#故障排除)
 
 ## 🚀 快速开始
 
-### 1. 安装依赖
-```bash
-npm install
-```
+### 1. 环境配置
 
-### 2. 环境配置
-复制环境变量文件：
 ```bash
+# 复制环境变量模板
 cp .env.example .env
 ```
 
 配置必要的环境变量：
 ```bash
-# 数据库
-DATABASE_URL=postgresql://user:password@localhost:5432/subscription_service
+# 服务配置
+NODE_ENV=development
+PORT=8088
+LOG_LEVEL=info
 
-# Stripe
+# 数据库
+DATABASE_URL=postgresql://postgres:password@localhost:5432/subscription_service
+
+# Stripe配置
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 
-# Auth Service
-AUTH_SERVICE_URL=http://localhost:8087
+# JWT验证
+JWKS_URL=https://tymoe.com/jwks.json
 
-# 内部API密钥
-INTERNAL_API_KEY=your-secure-key
+# 安全配置
+INTERNAL_API_KEY=your-secure-internal-api-key
+ADMIN_MAINTENANCE_MODE=false
+
+# Intent配置
+INTENT_TTL_MINUTES=60
 ```
 
-### 3. 数据库设置
+### 2. 安装依赖和数据库设置
+
 ```bash
+# 安装依赖
+npm install
+
+# 运行数据库迁移
 npx prisma migrate dev
+
+# 生成Prisma客户端
 npx prisma generate
 ```
 
-### 4. 启动服务
+### 3. 启动服务
+
 ```bash
-# 开发模式
+# 开发模式（自动重载）
 npm run dev
 
 # 生产模式
 npm run build
 npm start
+
+# 类型检查
+npm run typecheck
+
+# 代码检查
+npm run lint
+```
+
+### 4. Stripe Webhook设置
+
+```bash
+# 安装Stripe CLI
+brew install stripe/stripe-cli/stripe
+
+# 启动Webhook监听
+stripe listen --forward-to localhost:8088/api/subscription-service/v1/webhooks/stripe
 ```
 
 ### 5. 验证服务
+
 ```bash
 # 健康检查
 curl http://localhost:8088/health
@@ -127,889 +155,738 @@ curl http://localhost:8088/health
 }
 ```
 
-## 🎯 API接口详解
-
-### 用户前端API (需要JWT认证)
-
-所有用户API都需要在请求头中携带JWT token：
-```
-Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
-```
-
-#### 1. 获取组织订阅状态
-
-**端点**: `GET /organizations/{organizationId}/subscription-status`
-
-**用途**: 用户选择店铺后立即调用，获取完整订阅状态并用于前端缓存
-
-**请求示例**:
-```bash
-curl -X GET http://localhost:8088/api/subscription-service/v1/organizations/org-123/subscription-status \
-  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..."
-```
-
-**响应示例**:
-```json
-{
-  "success": true,
-  "data": {
-    "organizationId": "org-123",
-    "organizationName": "美丽沙龙",
-    "subscriptions": [
-      {
-        "id": "sub-456",
-        "productKey": "ploml",
-        "tier": "basic",
-        "status": "active",
-        "currentPeriodStart": "2024-01-15T00:00:00Z",
-        "currentPeriodEnd": "2024-02-15T23:59:59Z",
-        "trialEnd": null,
-        "cancelAtPeriodEnd": false,
-        "features": [
-          "appointment_booking",
-          "customer_management",
-          "service_catalog",
-          "basic_reports"
-        ]
-      }
-    ],
-    "lastUpdated": "2024-01-20T10:30:00Z"
-  }
-}
-```
-
-#### 2. 检查功能权限
-
-**端点**: `GET /organizations/{organizationId}/products/{productKey}/features/{featureKey}/access`
-
-**用途**: 当缓存显示无权限时，实时检查最新权限状态
-
-**请求示例**:
-```bash
-curl -X GET http://localhost:8088/api/subscription-service/v1/organizations/org-123/products/ploml/features/advanced_reports/access \
-  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..."
-```
-
-**响应示例**:
-```json
-{
-  "success": true,
-  "data": {
-    "hasAccess": false,
-    "currentTier": "basic",
-    "featureKey": "advanced_reports",
-    "requiresMinimumTier": "standard"
-  }
-}
-```
-
-#### 3. 获取产品定价
-
-**端点**: `GET /products/{productKey}/pricing`
-
-**用途**: 显示升级页面时获取定价信息
-
-**请求示例**:
-```bash
-curl -X GET http://localhost:8088/api/subscription-service/v1/products/ploml/pricing \
-  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..."
-```
-
-**响应示例**:
-```json
-{
-  "success": true,
-  "data": {
-    "productKey": "ploml",
-    "pricing": [
-      {
-        "tier": "basic",
-        "billingCycle": "monthly",
-        "amount": 2900,
-        "currency": "usd",
-        "features": ["appointment_booking", "customer_management"]
-      },
-      {
-        "tier": "standard",
-        "billingCycle": "monthly",
-        "amount": 4900,
-        "currency": "usd",
-        "features": ["appointment_booking", "customer_management", "advanced_reports"]
-      }
-    ]
-  }
-}
-```
-
-#### 4. 开始试用
-
-**端点**: `POST /organizations/{organizationId}/subscriptions/start-trial`
-
-**用途**: 用户一键开始30天免费试用
-
-**请求示例**:
-```bash
-curl -X POST http://localhost:8088/api/subscription-service/v1/organizations/org-123/subscriptions/start-trial \
-  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "productKey": "ploml"
-  }'
-```
-
-**响应示例**:
-```json
-{
-  "success": true,
-  "data": {
-    "subscription": {
-      "id": "sub-789",
-      "organizationId": "org-123",
-      "productKey": "ploml",
-      "tier": "trial",
-      "status": "trialing",
-      "trialEnd": "2024-02-20T23:59:59Z"
-    },
-    "trialPeriodDays": 30,
-    "features": [
-      "appointment_booking",
-      "customer_management",
-      "service_catalog"
-    ],
-    "message": "试用已开始，享受30天免费体验！"
-  }
-}
-```
-
-#### 5. 创建支付会话（订阅付费版）
-
-**端点**: `POST /organizations/{organizationId}/subscriptions/checkout`
-
-**用途**: 用户选择付费套餐，创建Stripe支付链接
-
-**请求示例**:
-```bash
-curl -X POST http://localhost:8088/api/subscription-service/v1/organizations/org-123/subscriptions/checkout \
-  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "productKey": "ploml",
-    "tier": "basic",
-    "billingCycle": "monthly",
-    "successUrl": "https://ploml.com/success",
-    "cancelUrl": "https://ploml.com/cancel"
-  }'
-```
-
-**响应示例**:
-```json
-{
-  "success": true,
-  "data": {
-    "checkoutUrl": "https://checkout.stripe.com/pay/cs_test_123...",
-    "message": "请完成支付以激活订阅"
-  }
-}
-```
-
-#### 6. 升级订阅
-
-**端点**: `POST /organizations/{organizationId}/subscriptions/upgrade`
-
-**用途**: 用户升级到更高套餐
-
-**请求示例**:
-```bash
-curl -X POST http://localhost:8088/api/subscription-service/v1/organizations/org-123/subscriptions/upgrade \
-  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "productKey": "ploml",
-    "newTier": "standard",
-    "billingCycle": "monthly",
-    "successUrl": "https://ploml.com/upgrade-success",
-    "cancelUrl": "https://ploml.com/upgrade-cancel"
-  }'
-```
-
-**响应示例（需要支付）**:
-```json
-{
-  "success": true,
-  "data": {
-    "requiresPayment": true,
-    "checkoutUrl": "https://checkout.stripe.com/pay/cs_test_456...",
-    "message": "请完成支付以升级订阅"
-  }
-}
-```
-
-**响应示例（直接升级）**:
-```json
-{
-  "success": true,
-  "data": {
-    "requiresPayment": false,
-    "subscription": {
-      "id": "sub-456",
-      "tier": "standard",
-      "status": "active"
-    },
-    "features": [
-      "appointment_booking",
-      "customer_management",
-      "service_catalog",
-      "advanced_reports"
-    ],
-    "message": "订阅已成功升级！"
-  }
-}
-```
-
-#### 7. 取消订阅
-
-**端点**: `POST /organizations/{organizationId}/subscriptions/cancel`
-
-**用途**: 用户取消订阅
-
-**请求示例**:
-```bash
-curl -X POST http://localhost:8088/api/subscription-service/v1/organizations/org-123/subscriptions/cancel \
-  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "productKey": "ploml",
-    "cancelAtPeriodEnd": true
-  }'
-```
-
-**响应示例**:
-```json
-{
-  "success": true,
-  "data": {
-    "subscription": {
-      "id": "sub-456",
-      "status": "active",
-      "cancelAtPeriodEnd": true,
-      "currentPeriodEnd": "2024-02-15T23:59:59Z"
-    }
-  },
-  "message": "订阅将在当前计费周期结束时取消，在此之前您仍可使用所有功能"
-}
-```
-
-### 管理员API (需要内部API密钥)
-
-所有管理员API都需要在请求头中携带内部API密钥：
-```
-X-API-Key: your-internal-api-key
-```
-
-#### 1. 组织管理
-
-**创建组织**: `POST /admin/organizations`
-
-**请求示例**:
-```bash
-curl -X POST http://localhost:8088/api/subscription-service/v1/admin/organizations \
-  -H "X-API-Key: your-internal-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "id": "org-456",
-    "name": "时尚理发店",
-    "email": "admin@fashionhair.com"
-  }'
-```
-
-**响应示例**:
-```json
-{
-  "success": true,
-  "data": {
-    "organization": {
-      "id": "org-456",
-      "name": "时尚理发店",
-      "stripeCustomerId": null,
-      "hasUsedTrial": false,
-      "createdAt": "2024-01-20T10:30:00Z"
-    }
-  }
-}
-```
-
-**获取组织信息**: `GET /admin/organizations/{organizationId}`
-
-**更新组织信息**: `PATCH /admin/organizations/{organizationId}`
-
-**删除组织**: `DELETE /admin/organizations/{organizationId}`
-
-#### 2. 订阅管理
-
-**创建试用订阅**: `POST /admin/subscriptions/trial`
-
-**创建付费订阅**: `POST /admin/subscriptions/paid`
-
-**升级订阅**: `PATCH /admin/subscriptions/{subscriptionId}/upgrade`
-
-**取消订阅**: `PATCH /admin/subscriptions/{subscriptionId}/cancel`
-
-### Webhook接口
-
-#### Stripe Webhook
-
-**端点**: `POST /webhooks/stripe`
-
-**用途**: 接收Stripe的支付状态通知，自动更新订阅状态
-
-**配置要求**:
-```bash
-# Stripe CLI配置
-stripe listen --forward-to localhost:8088/api/subscription-service/v1/webhooks/stripe
-```
-
-**处理的事件类型**:
-- `checkout.session.completed` - 支付完成
-- `invoice.payment_succeeded` - 续费成功
-- `invoice.payment_failed` - 续费失败
-- `customer.subscription.updated` - 订阅更新
-- `customer.subscription.deleted` - 订阅取消
-
-## 🗄️ 数据库架构
-
-### 数据库设计理念
-
-本订阅服务的数据库设计遵循以下核心原则：
-
-#### 1. 数据隔离与安全
-- **组织级隔离**: 所有业务数据都严格按组织ID（organizationId）隔离，确保不同组织之间数据完全独立
-- **用户权限控制**: 通过auth-service验证用户对组织的访问权限，避免越权访问
-- **敏感信息保护**: Stripe相关的敏感信息（如客户ID、订阅ID）单独存储，通过Webhook异步更新
-
-#### 2. 扩展性设计
-- **产品线扩展**: 通过Product表支持多产品线（ploml、mopai），便于未来添加新产品
-- **订阅层级扩展**: 支持5个订阅层级（trial/basic/standard/advanced/pro），可灵活调整功能权限
-- **定价灵活性**: Price表独立管理定价策略，支持不同计费周期和促销活动
-
-#### 3. 业务逻辑完整性
-- **订阅状态管理**: 完整跟踪订阅生命周期（试用→付费→升级→取消）
-- **试用机制**: 通过hasUsedTrial字段确保每个组织只能使用一次试用
-- **计费周期管理**: 精确跟踪订阅的起止时间，支持按需计费
-
-#### 4. 微服务权限控制
-- **使用量统计**: MicroserviceUsage表按时间段（小时/日/月）统计API调用量
-- **并发控制**: ConcurrentRequests表实时跟踪正在进行的请求，实现并发限制
-- **细粒度权限**: 支持不同订阅层级对同一微服务的不同使用限制
-
-#### 5. 数据一致性
-- **外键约束**: 所有关联关系都有明确的外键约束，确保数据完整性
-- **原子操作**: 关键业务操作（如订阅升级）使用数据库事务确保一致性
-- **审计追踪**: 记录所有重要操作的时间戳，便于问题排查和数据分析
-
-### 核心数据模型
+## 🔧 环境变量详解
+
+| 变量名 | 说明 | 默认值 | 必需 |
+|--------|------|--------|------|
+| `NODE_ENV` | 运行环境 | `development` | ✅ |
+| `PORT` | 服务端口 | `8088` | ✅ |
+| `DATABASE_URL` | PostgreSQL连接字符串 | - | ✅ |
+| `STRIPE_SECRET_KEY` | Stripe密钥 | - | ✅ |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Webhook签名密钥 | - | ✅ |
+| `JWKS_URL` | JWT公钥获取地址 | `https://tymoe.com/jwks.json` | ✅ |
+| `INTERNAL_API_KEY` | 内部API密钥（Admin操作） | - | ✅ |
+| `ADMIN_MAINTENANCE_MODE` | Admin维护模式开关 | `false` | ✅ |
+| `INTENT_TTL_MINUTES` | Intent过期时间（分钟） | `60` | ✅ |
+| `LOG_LEVEL` | 日志级别 | `info` | ✅ |
+| `DEFAULT_REGION` | 默认地区 | `CA` | ✅ |
+| `DEFAULT_CURRENCY` | 默认货币 | `CAD` | ✅ |
+| `STRIPE_ACCOUNT_CA` | 加拿大Stripe账户密钥 | - | ❌ |
+| `STRIPE_ACCOUNT_US` | 美国Stripe账户密钥 | - | ❌ |
+| `STRIPE_ACCOUNT_EU` | 欧盟Stripe账户密钥 | - | ❌ |
+| `STRIPE_ACCOUNT_GB` | 英国Stripe账户密钥 | - | ❌ |
+| `STRIPE_ACCOUNT_AU` | 澳大利亚Stripe账户密钥 | - | ❌ |
+| `STRIPE_SUCCESS_URL` | Stripe成功页面URL | `https://tymoe.com/success?session_id={CHECKOUT_SESSION_ID}` | ❌ |
+| `STRIPE_CANCEL_URL` | Stripe取消页面URL | `https://tymoe.com/cancel` | ❌ |
+
+## 🗄️ 数据库Schema
+
+### 核心模型
 
 ```prisma
-// 组织表（店铺）
+// 组织表
 model Organization {
-  id                String   @id @default(cuid())
-  name              String
-  stripeCustomerId  String?  @unique
-  hasUsedTrial      Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String   @id
+  userId           String   // auth-service用户ID
+  name             String
+  email            String?  // 用于计费
+  stripeCustomerId String?  // 延迟创建
+  hasUsedTrial     Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
 
-  subscriptions     Subscription[]
+  subscriptions    Subscription[]
+  intents          SubscriptionIntent[]
+  usageRecords     UsageRecord[]
 }
 
-// 产品表（ploml/mopai）
+// 产品表
 model Product {
-  key       String   @id // "ploml" | "mopai"
-  name      String   // "Ploml Beauty Management"
-  active    Boolean  @default(true)
+  key         String @id     // ploml, mopai
+  name        String         // 产品名称
+  description String?        // 产品描述
+  levelKey    String         // 关联Level的key (trial, basic, standard, advanced, pro)
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  subscriptions Subscription[]
+  level         Level          @relation(fields: [levelKey], references: [key])
   prices        Price[]
+  subscriptions Subscription[]
+}
+
+// 级别表
+model Level {
+  key         String @id     // trial, basic, standard, advanced, pro
+  name        String         // 级别名称
+  description String?        // 级别描述
+  sortOrder   Int            // 排序顺序
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products     Product[]
+  entitlements Entitlement[]
+}
+
+// 功能表
+model Feature {
+  key         String @id     // api_requests, storage_gb, team_members等
+  name        String         // 功能名称
+  description String?        // 功能描述
+  dataType    String         // boolean, number
+  unit        String?        // requests, gb, members等单位
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  entitlements Entitlement[]
+}
+
+// 权限配置表
+model Entitlement {
+  id        String @id @default(cuid())
+  levelKey  String
+  featureKey String
+
+  // 对于boolean类型功能，使用isEnabled字段
+  isEnabled Boolean @default(false)
+
+  // 对于number类型功能，使用limit字段
+  limit     Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  level   Level   @relation(fields: [levelKey], references: [key])
+  feature Feature @relation(fields: [featureKey], references: [key])
+
+  @@unique([levelKey, featureKey])
+}
+
+// 价格表
+model Price {
+  id           String @id @default(cuid())
+  productKey   String
+  tier         String         // 与levelKey对应
+  billingCycle String         // monthly, yearly
+  region       String @default("CA")  // CA, US, EU, GB, AU
+  currency     String @default("CAD") // CAD, USD, EUR, GBP, AUD
+  amount       Int            // 以最小货币单位计价（如分）
+  stripePriceId String?       // Stripe价格ID
+  isActive     Boolean @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  product      Product @relation(fields: [productKey], references: [key])
+
+  @@unique([productKey, tier, billingCycle, region])
 }
 
 // 订阅表
 model Subscription {
-  id                    String    @id @default(cuid())
-  organizationId        String
-  productKey            String
-  tier                  String    // "trial" | "basic" | "standard" | "advanced" | "pro"
-  status                String    // "trialing" | "active" | "past_due" | "canceled"
-  billingCycle          String?   // "monthly" | "yearly"
-  currentPeriodStart    DateTime?
-  currentPeriodEnd      DateTime?
-  trialEnd              DateTime?
-  stripeSubscriptionId  String?   @unique
-  stripePriceId         String?
-  cancelAtPeriodEnd     Boolean   @default(false)
+  id                   String   @id @default(cuid())
+  organizationId       String
+  productKey           String   // ploml, mopai
+  status               SubscriptionStatus // TRIALING|ACTIVE|PAST_DUE|CANCELED|EXPIRED
+  tier                 String?  // trial, basic, standard等
+  billingCycle         String?  // monthly|yearly
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  gracePeriodEnd       DateTime? // 宽限期结束时间
+  trialEnd             DateTime?
+  stripeSubscriptionId String?  @unique
+  stripePriceId        String?
+  cancelAtPeriodEnd    Boolean  @default(false)
+  version              Int      @default(1)  // 乐观锁
+  lastWebhookEventId   String?
+  lastSyncedAt         DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  deletedAt            DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id])
   product      Product      @relation(fields: [productKey], references: [key])
+
+  @@unique([organizationId, productKey])
 }
 
-// 价格表（Stripe价格配置）
-model Price {
-  id            String  @id @default(cuid())
-  stripePriceId String  @unique
-  productKey    String
-  tier          String  // "basic" | "standard" | "advanced" | "pro"
-  billingCycle  String  // "monthly" | "yearly"
-  amount        Int     // 价格（分）
-  currency      String  @default("usd")
-  active        Boolean @default(true)
-
-  product       Product        @relation(fields: [productKey], references: [key])
-  subscriptions Subscription[]
+// Intent表（防竞态条件）
+model SubscriptionIntent {
+  id                String   @id @default(cuid())
+  organizationId    String
+  productKey        String
+  action            String   // checkout|upgrade|cancel|reactivate|start_trial
+  status            String   @default("pending") // pending|completed|failed|expired
+  stripePriceId     String?
+  stripeCheckoutId  String?
+  stripeSubscriptionId String?
+  metadata          Json?
+  version           Int      @default(1)  // 乐观锁版本控制
+  expiresAt         DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
-// 微服务使用量统计表
-model MicroserviceUsage {
-  id             String   @id @default(cuid())
-  organizationId String   @map("organization_id")
-  serviceKey     String   @map("service_key")
-  usagePeriod    String   @map("usage_period")  // "2024-01-20-14" | "2024-01-20" | "2024-01"
-  periodType     String   @map("period_type")   // "hourly" | "daily" | "monthly"
-  requestCount   Int      @default(0) @map("request_count")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  @@unique([organizationId, serviceKey, usagePeriod, periodType], name: "organizationId_serviceKey_usagePeriod_periodType")
-  @@map("microservice_usage")
+// Stripe事件处理表（幂等性）
+model StripeEventProcessed {
+  id           String   @id  // Stripe event id
+  eventType    String
+  processed    Boolean  @default(false)
+  attempts     Int      @default(0)
+  lastError    String?
+  processedAt  DateTime?
+  createdAt    DateTime @default(now())
 }
 
-// 微服务并发请求跟踪表
-model ConcurrentRequests {
-  id             String   @id @default(cuid())
-  organizationId String   @map("organization_id")
-  serviceKey     String   @map("service_key")
-  requestId      String   @map("request_id")
-  startedAt      DateTime @default(now()) @map("started_at")
 
-  @@map("concurrent_requests")
+// 审计日志表
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String   // SUBSCRIPTION|ORGANIZATION|TRIAL|INTENT
+  entityId   String?
+  action     String   // CREATE|UPDATE|DELETE|CANCEL|REACTIVATE
+  actorType  String   // USER|ADMIN|WEBHOOK|SYSTEM
+  actorId    String?
+  changes    Json?
+  metadata   Json?
+  timestamp  DateTime @default(now())
 }
 ```
 
-### 数据关系图
+## 📖 API文档
 
-```
-Organization (店铺)
-    ├── hasUsedTrial (是否使用过试用)
-    ├── stripeCustomerId (Stripe客户ID)
-    ├── Subscription[] (订阅列表)
-    │       ├── Product (ploml/mopai)
-    │       ├── tier (套餐等级)
-    │       ├── status (订阅状态)
-    │       └── Price (价格配置)
-    │               └── Stripe Price (Stripe价格对象)
-    ├── MicroserviceUsage[] (微服务使用统计)
-    │       ├── serviceKey (服务标识)
-    │       ├── usagePeriod (使用周期)
-    │       ├── periodType (周期类型)
-    │       └── requestCount (请求次数)
-    └── ConcurrentRequests[] (并发请求跟踪)
-            ├── serviceKey (服务标识)
-            ├── requestId (请求ID)
-            └── startedAt (开始时间)
+### 用户API（需要JWT认证）
+
+#### 1. 同步组织信息
+```bash
+POST /organizations/sync
+Authorization: Bearer {jwt_token}
+
+# 从JWT payload中获取组织信息并同步到本地数据库
 ```
 
-### 数据流设计
+#### 2. 创建Trial订阅
+```bash
+POST /subscriptions
+Authorization: Bearer {jwt_token}
+Content-Type: application/json
 
-#### 1. 订阅数据流
-```
-用户注册 → Organization创建 → 试用订阅 → Stripe支付 → 订阅激活 → 功能权限生效
-```
-
-#### 2. 权限验证数据流
-```
-API请求 → JWT验证 → 组织权限检查 → 订阅状态查询 → 功能权限验证 → 允许/拒绝访问
-```
-
-#### 3. 微服务调用数据流
-```
-微服务请求 → 权限检查 → 使用量统计 → 并发控制 → 请求处理 → 统计更新
-```
-
-## ⚡ 功能权限体系
-
-### 产品线功能对比
-
-#### Ploml (美业管理)
-
-| 功能 | Trial | Basic | Standard | Advanced | Pro |
-|------|-------|-------|----------|----------|-----|
-| 预约管理 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 客户管理 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 服务项目管理 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 基础报表 | ❌ | ✅ | ✅ | ✅ | ✅ |
-| 高级报表 | ❌ | ❌ | ✅ | ✅ | ✅ |
-| 多店铺管理 | ❌ | ❌ | ❌ | ✅ | ✅ |
-| API访问 | ❌ | ❌ | ❌ | ❌ | ✅ |
-| 自定义字段 | ❌ | ❌ | ❌ | ❌ | ✅ |
-
-#### Mopai (餐饮管理)
-
-| 功能 | Trial | Basic | Standard | Advanced | Pro |
-|------|-------|-------|----------|----------|-----|
-| 点餐管理 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 桌台管理 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 菜单管理 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 基础报表 | ❌ | ✅ | ✅ | ✅ | ✅ |
-| 库存管理 | ❌ | ❌ | ✅ | ✅ | ✅ |
-| 多门店管理 | ❌ | ❌ | ❌ | ✅ | ✅ |
-| 第三方集成 | ❌ | ❌ | ❌ | ❌ | ✅ |
-
-### 微服务权限控制系统
-
-本系统实现了细粒度的微服务访问控制，不同订阅层级可以使用相同的微服务但享有不同的使用限制。
-
-#### 支持的微服务列表
-
-| 微服务 | 描述 | 端点 |
-|--------|------|------|
-| auth_service | 用户认证和权限管理 | https://tymoe.com/api/auth-service |
-| notification_service | 邮件、短信、推送通知 | https://api.tymoe.com/notification-service |
-| storage_service | 图片、文档、视频存储 | https://api.tymoe.com/storage-service |
-| analytics_service | 数据分析和报表生成 | https://api.tymoe.com/analytics-service |
-| ai_service | 智能推荐、自动化处理 | https://api.tymoe.com/ai-service |
-| integration_service | 第三方API集成和数据同步 | https://api.tymoe.com/integration-service |
-| payment_service | 在线支付处理 | https://api.tymoe.com/payment-service |
-
-#### 微服务使用限制对比
-
-##### 认证服务 (auth_service)
-| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
-|----------|-------|-------|----------|----------|-----|
-| 每日请求 | 1,000 | 5,000 | 10,000 | 50,000 | 无限制 |
-| 每小时请求 | 100 | 500 | 1,000 | 5,000 | 无限制 |
-| 并发请求 | - | - | - | - | - |
-
-##### 通知服务 (notification_service)
-| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
-|----------|-------|-------|----------|----------|-----|
-| 每日请求 | 50 | 500 | 2,000 | 10,000 | 无限制 |
-| 每小时请求 | 10 | 50 | 200 | 1,000 | 无限制 |
-| 并发请求 | - | - | - | - | - |
-
-##### 文件存储服务 (storage_service)
-| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
-|----------|-------|-------|----------|----------|-----|
-| 每日请求 | 100 | 1,000 | 5,000 | 20,000 | 无限制 |
-| 每小时请求 | 20 | 100 | 500 | 2,000 | 无限制 |
-| 并发请求 | - | - | - | - | - |
-
-##### 分析服务 (analytics_service)
-| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
-|----------|-------|-------|----------|----------|-----|
-| 访问权限 | ❌ | ❌ | ✅ | ✅ | ✅ |
-| 每日请求 | 0 | 0 | 100 | 1,000 | 无限制 |
-| 每小时请求 | 0 | 0 | 20 | 100 | 无限制 |
-
-##### AI智能服务 (ai_service)
-| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
-|----------|-------|-------|----------|----------|-----|
-| 访问权限 | ❌ | ❌ | ❌ | ✅ | ✅ |
-| 每日请求 | 0 | 0 | 0 | 50 | 500 |
-| 每小时请求 | 0 | 0 | 0 | 10 | 100 |
-
-##### 第三方集成服务 (integration_service)
-| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
-|----------|-------|-------|----------|----------|-----|
-| 访问权限 | ❌ | ❌ | ❌ | ❌ | ✅ |
-| 每日请求 | 0 | 0 | 0 | 0 | 10,000 |
-| 每小时请求 | 0 | 0 | 0 | 0 | 1,000 |
-
-##### 支付服务 (payment_service)
-| 限制类型 | Trial | Basic | Standard | Advanced | Pro |
-|----------|-------|-------|----------|----------|-----|
-| 每日请求 | 10 | 100 | 500 | 2,000 | 无限制 |
-| 每小时请求 | 5 | 20 | 100 | 500 | 无限制 |
-| 并发请求 | - | - | - | - | - |
-
-#### 微服务权限API
-
-##### 1. 检查微服务权限
-**端点**: `POST /microservices/check-permission`
-
-**请求参数**:
-```json
 {
   "organizationId": "org-123",
-  "serviceKey": "notification_service"
+  "productId": "ploml-trial"
 }
+
+# 响应：创建的trial订阅信息
 ```
 
-**响应示例（允许访问）**:
-```json
+#### 3. 使用量统计查询
+```bash
+GET /usage/stats?serviceKey=test-service&periodType=daily&startPeriod=2024-09-01&endPeriod=2024-09-30
+Authorization: Bearer {jwt_token}
+
+# 响应：使用量统计数据
 {
   "success": true,
   "data": {
-    "allowed": true,
-    "currentUsage": 45,
-    "limit": 500,
-    "resetTime": "2024-01-21T00:00:00Z",
-    "tier": "basic"
-  }
-}
-```
-
-**响应示例（超出限制）**:
-```json
-{
-  "success": true,
-  "data": {
-    "allowed": false,
-    "reason": "Daily request limit exceeded",
-    "currentUsage": 500,
-    "limit": 500,
-    "resetTime": "2024-01-21T00:00:00Z",
-    "tier": "basic"
-  }
-}
-```
-
-##### 2. 获取组织可访问的微服务
-**端点**: `GET /microservices/accessible/{organizationId}`
-
-**响应示例**:
-```json
-{
-  "success": true,
-  "data": {
-    "tier": "standard",
-    "services": [
-      {
-        "serviceKey": "auth_service",
-        "limits": {
-          "dailyRequests": 10000,
-          "hourlyRequests": 1000,
-          "concurrentRequests": 0
-        }
-      },
-      {
-        "serviceKey": "notification_service",
-        "limits": {
-          "dailyRequests": 2000,
-          "hourlyRequests": 200,
-          "concurrentRequests": 0
-        }
-      }
-    ]
-  }
-}
-```
-
-##### 3. 获取微服务使用统计
-**端点**: `GET /microservices/stats/{organizationId}?serviceKey=notification_service`
-
-**响应示例**:
-```json
-{
-  "success": true,
-  "data": {
-    "organizationId": "org-123",
-    "tier": "basic",
     "usage": [
       {
-        "serviceKey": "notification_service",
-        "usagePeriod": "2024-01-20",
-        "periodType": "daily",
-        "requestCount": 45
-      },
-      {
-        "serviceKey": "notification_service",
-        "usagePeriod": "2024-01-20-14",
-        "periodType": "hourly",
-        "requestCount": 12
+        "id": "usage-123",
+        "serviceKey": "test-service",
+        "usagePeriod": "2024-09-25",
+        "requestCount": 150,
+        "subscription": {
+          "id": "sub-123",
+          "productKey": "test-product",
+          "status": "active"
+        }
       }
     ],
-    "concurrent": [
-      {
-        "serviceKey": "notification_service",
-        "requestId": "req-uuid-123",
-        "startedAt": "2024-01-20T14:30:25Z"
-      }
-    ],
-    "timestamp": "2024-01-20T14:30:30Z"
+    "total": 1
   }
 }
 ```
 
-#### 微服务权限中间件
+#### 4. 按服务聚合使用量
+```bash
+GET /usage/by-service?periodType=daily&startPeriod=2024-09-01&endPeriod=2024-09-30
+Authorization: Bearer {jwt_token}
 
-本系统提供了`requireMicroservicePermission`中间件，其他微服务可以轻松集成权限控制：
-
-```typescript
-import { requireMicroservicePermission } from '@tymoe/subscription-service-middleware';
-
-// 在路由中使用
-app.get('/api/send-notification',
-  validateUserJWT,
-  requireMicroservicePermission('notification_service'),
-  sendNotificationHandler
-);
-```
-
-#### 使用量统计机制
-
-1. **请求开始**: 创建并发请求记录
-2. **请求处理**: 业务逻辑执行
-3. **请求结束**: 删除并发记录，更新使用量统计
-4. **定期清理**: 清理超时的并发请求记录（1小时）
-
-### 权限检查逻辑
-
-```typescript
-// 功能权限检查示例
-function hasFeatureAccess(productKey: string, tier: string, feature: string): boolean {
-  const features = {
-    ploml: {
-      trial: ['appointment_booking', 'customer_management', 'service_catalog'],
-      basic: ['appointment_booking', 'customer_management', 'service_catalog', 'basic_reports'],
-      standard: ['appointment_booking', 'customer_management', 'service_catalog', 'basic_reports', 'advanced_reports'],
-      // ...
-    },
-    mopai: {
-      // ...
+# 响应：按服务聚合的使用量数据
+{
+  "success": true,
+  "data": [
+    {
+      "serviceKey": "test-service",
+      "totalRequests": 5420,
+      "recordCount": 30
     }
-  };
-
-  return features[productKey]?.[tier]?.includes(feature) || false;
+  ]
 }
 ```
 
-## 🔐 认证与安全
-
-### 双重认证体系
-
-#### 1. JWT认证（用户API）
-
-- **用途**: 前端用户调用
-- **验证流程**:
-  1. 从请求头获取JWT token
-  2. 使用auth-service公钥验证签名
-  3. 检查token有效期
-  4. 验证用户对组织的权限
-
-#### 2. API密钥认证（管理员API）
-
-- **用途**: 服务间调用、管理后台
-- **验证流程**:
-  1. 从请求头获取API密钥
-  2. 与配置的内部密钥比较
-  3. 验证通过后拥有完整权限
-
-### 安全措施
-
-1. **数据隔离**: 用户只能访问自己拥有的组织数据
-2. **权限验证**: 每次请求都验证用户对组织的权限
-3. **敏感信息保护**: Stripe信息通过Webhook异步更新
-4. **审计日志**: 记录所有重要操作
-5. **HTTPS强制**: 生产环境强制使用HTTPS
-
-## 🏗️ 开发指南
-
-### 服务架构
-
-订阅服务采用分层架构设计：
-
-- **`src/index.ts`** - 主入口点，负责应用启动、错误处理和进程管理
-- **`src/server.ts`** - 服务器启动模块，处理数据库/Redis连接和优雅关闭
-- **`src/app.ts`** - Express应用配置，定义路由和中间件
-
-### 🔐 认证架构
-
-#### JWT验证流程
-```
-前端请求 → JWT验证中间件 → 组织权限验证 → 业务逻辑 → 返回结果
-```
-
-#### 服务间调用流程
-```
-内部服务 → API密钥验证 → 业务逻辑 → 返回结果
-```
-
-### 🛠️ 开发环境设置
-
-#### 1. 本地开发工具
+#### 5. 使用量趋势分析
 ```bash
-# 安装全局工具
-npm install -g tsx prisma
+GET /usage/trends?serviceKey=test-service&periodType=daily&limit=30
+Authorization: Bearer {jwt_token}
 
-# 安装Stripe CLI
-brew install stripe/stripe-cli/stripe
+# 响应：时间序列使用量趋势
+{
+  "success": true,
+  "data": [
+    {
+      "usagePeriod": "2024-09-01",
+      "requestCount": 120,
+      "createdAt": "2024-09-01T10:00:00Z"
+    }
+  ]
+}
 ```
 
-#### 2. 数据库开发
+#### 6. 当前周期使用量
 ```bash
-# 生成Prisma客户端
-npm run prisma:gen
+GET /usage/current/test-service?periodType=daily
+Authorization: Bearer {jwt_token}
 
-# 运行数据库迁移
-npm run prisma:migrate
-
-# 打开数据库管理界面
-npm run prisma:studio
+# 响应：当前周期的使用量
+{
+  "success": true,
+  "data": {
+    "currentPeriod": "2024-09-25",
+    "requestCount": 150,
+    "lastUpdated": "2024-09-25T14:30:00Z"
+  }
+}
 ```
 
-#### 3. 开发流程
+#### 3. 创建Intent（付费订阅）
 ```bash
-# 1. 启动数据库和Redis
-docker-compose up postgres redis
+POST /subscriptions/intent
+Authorization: Bearer {jwt_token}
+Content-Type: application/json
 
-# 2. 运行数据库迁移
-npm run prisma:migrate
+{
+  "organizationId": "org-123",
+  "productId": "ploml-basic",
+  "actionType": "checkout",
+  "targetTier": "basic",
+  "targetBillingCycle": "monthly",
+  "successUrl": "https://app.com/success",
+  "cancelUrl": "https://app.com/cancel",
+  "idempotencyKey": "unique-key"
+}
 
-# 3. 启动开发服务器
-npm run dev
-
-# 4. 在另一个终端启动Stripe监听
-stripe listen --forward-to localhost:8088/api/subscription-service/v1/webhooks/stripe
+# 响应：{ checkoutUrl, sessionId, intentId }
 ```
 
-### 🧪 测试策略
-
-#### 代码质量检查
+#### 4. 获取订阅信息
 ```bash
-# TypeScript类型检查
-npm run typecheck
+GET /subscriptions/{id}
+Authorization: Bearer {jwt_token}
 
-# 编译检查
-npm run build
+# 响应：订阅详情，包含产品信息
 ```
 
-#### API测试示例
+### Intent API（需要JWT认证）
+
+#### 1. 创建Intent
 ```bash
-# 测试健康检查
-curl http://localhost:8088/health
+POST /intents
+Authorization: Bearer {jwt_token}
+Content-Type: application/json
 
-# 测试用户API（需要有效JWT）
-curl -X GET http://localhost:8088/api/subscription-service/v1/organizations/org-123/subscription-status \
-  -H "Authorization: Bearer valid-jwt-token"
-
-# 测试管理员API
-curl -X GET http://localhost:8088/api/subscription-service/v1/admin/organizations/org-123 \
-  -H "X-API-Key: your-internal-api-key"
+{
+  "organizationId": "org-123",
+  "productKey": "ploml",
+  "actionType": "checkout",
+  "targetTier": "basic",
+  "metadata": {}
+}
 ```
 
-## 🚀 部署运维
+#### 2. 获取Intent
+```bash
+GET /intents/{intentId}
+Authorization: Bearer {jwt_token}
+```
 
-### 环境变量配置
+#### 3. 获取待处理Intent
+```bash
+GET /intents/pending?organizationId=org-123
+Authorization: Bearer {jwt_token}
+```
 
-| 变量名 | 说明 | 示例 | 必需 |
-|--------|------|------|------|
-| `NODE_ENV` | 运行环境 | `production` | ✅ |
-| `PORT` | 服务端口 | `8088` | ✅ |
-| `DATABASE_URL` | 数据库连接 | `postgresql://...` | ✅ |
-| `REDIS_URL` | Redis连接 | `redis://localhost:6379/1` | ✅ |
-| `STRIPE_SECRET_KEY` | Stripe密钥 | `sk_live_...` | ✅ |
-| `STRIPE_WEBHOOK_SECRET` | Webhook密钥 | `whsec_...` | ✅ |
-| `AUTH_SERVICE_URL` | Auth服务地址 | `http://auth-service:8087` | ✅ |
-| `INTERNAL_API_KEY` | 内部API密钥 | `secure-random-key` | ✅ |
-| `CORS_ORIGIN` | CORS来源 | `https://ploml.com` | ❌ |
-| `LOG_LEVEL` | 日志级别 | `info` | ❌ |
+### Admin API（需要API Key）
+
+⚠️ **重要警告**：Admin API仅限维护/修复用途，生产环境禁止直接使用该接口创建付费订阅。所有调用必须写入AuditLog。
+
+所有Admin API需要设置维护模式并提供API密钥：
+
+```bash
+# 环境变量
+ADMIN_MAINTENANCE_MODE=true
+
+# 请求头
+X-API-Key: your-internal-api-key
+```
+
+#### 组织管理
+```bash
+# 创建组织
+POST /admin/organizations
+X-API-Key: {api_key}
+
+# 获取组织
+GET /admin/organizations/{id}
+X-API-Key: {api_key}
+
+# 更新组织
+PATCH /admin/organizations/{id}
+X-API-Key: {api_key}
+```
+
+#### 订阅管理
+```bash
+# 创建订阅 (仅维护模式)
+POST /admin/subscriptions
+X-API-Key: {api_key}
+
+⚠️ **注意**: 此接口仅用于运维修复，生产环境默认禁用，必须开启 ADMIN_MAINTENANCE_MODE 并提供 INTERNAL_API_KEY，且所有调用会写入审计日志。
+
+# 更新订阅状态
+PATCH /admin/subscriptions/{id}/status
+X-API-Key: {api_key}
+```
+
+### 内部API（需要内部API Key认证）
+
+#### 使用量记录
+```bash
+POST /usage/record
+X-Internal-API-Key: {internal_api_key}
+Content-Type: application/json
+
+{
+  "organizationId": "org-123",
+  "subscriptionId": "sub-123",
+  "serviceKey": "test-service",
+  "usagePeriod": "2024-09-25",
+  "periodType": "daily",
+  "requestCount": 5
+}
+
+# 响应：记录使用量成功
+{
+  "success": true,
+  "data": {
+    "id": "usage-123",
+    "organizationId": "org-123",
+    "subscriptionId": "sub-123",
+    "serviceKey": "test-service",
+    "usagePeriod": "2024-09-25",
+    "periodType": "daily",
+    "requestCount": 5,
+    "createdAt": "2024-09-25T10:30:00Z",
+    "updatedAt": "2024-09-25T10:30:00Z"
+  }
+}
+```
+
+### Webhook API
+
+#### Stripe Webhook
+```bash
+POST /webhooks/stripe
+Content-Type: application/json
+Stripe-Signature: {signature}
+
+# 处理的事件类型：
+# - checkout.session.completed
+# - customer.subscription.created
+# - customer.subscription.updated
+# - customer.subscription.deleted
+# - invoice.payment_succeeded
+# - invoice.payment_failed
+```
+
+## 🔒 认证与安全
+
+### JWT认证机制
+
+1. **JWT验证流程**:
+   - 提取Bearer token
+   - 使用JWKS获取公钥（缓存1小时）
+   - 验证token签名和声明
+   - 注入用户上下文到req.ctx
+
+2. **JWT Claims验证**:
+   ```javascript
+   {
+     "iss": "http://tymoe.com:8080",  // 必须匹配
+     "aud": "tymoe-service",          // 必须匹配
+     "sub": "user-id",
+     "organizations": [...],          // 用户拥有的组织
+     "exp": timestamp
+   }
+   ```
+
+### API Key认证
+
+Admin API使用内部API密钥：
+- 检查`X-API-Key`头部
+- 与`INTERNAL_API_KEY`环境变量精确匹配
+- 需要`ADMIN_MAINTENANCE_MODE=true`
+
+### 审计日志
+
+所有Admin操作和重要业务操作都记录审计日志：
+
+#### AuditLog 数据模型
+```prisma
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String   // SUBSCRIPTION|ORGANIZATION|TRIAL|INTENT
+  entityId   String?  // 相关实体ID
+  action     String   // CREATE|UPDATE|DELETE|CANCEL|REACTIVATE
+  actorType  String   // USER|ADMIN|WEBHOOK|SYSTEM
+  actorId    String?  // 操作者ID (用户ID或admin标识)
+  changes    Json?    // 具体变更内容
+  metadata   Json?    // 附加元数据 (如ticketId, reason等)
+  timestamp  DateTime @default(now())
+}
+```
+
+#### 审计日志示例
+```javascript
+{
+  entityType: "SUBSCRIPTION",
+  entityId: "sub-123",
+  action: "UPDATE",
+  actorType: "ADMIN",
+  actorId: "admin-user-id",
+  changes: { status: "ACTIVE" },
+  metadata: {
+    ticketId: "TICKET-123",
+    reason: "Customer support manual reactivation",
+    originalStatus: "CANCELED"
+  }
+}
+```
+
+#### Admin API 审计日志记录
+Admin API的所有操作都会自动记录审计日志：
+
+- **POST /admin/subscriptions**: 记录手动创建订阅的操作，包含`reason`和`ticketId`
+- **PATCH /admin/subscriptions/{id}/status**: 记录状态变更操作
+- **GET /admin/audit-logs**: 查询审计日志，支持按实体类型、操作者等条件过滤
+
+通过审计日志可以：
+1. 追踪所有敏感操作的完整历史
+2. 区分用户操作、管理员操作、Webhook操作和系统操作
+3. 记录操作的具体原因和上下文信息
+4. 支持合规性审计和问题排查
+
+## 🎯 业务逻辑详解
+
+### 权限系统（Entitlement-based）
+
+1. **级别管理**: 通过Level表定义5个级别（trial, basic, standard, advanced, pro）
+2. **功能配置**: 通过Feature表定义所有可用功能（API请求、存储、团队成员等）
+3. **权限矩阵**: 通过Entitlement表配置每个级别对应的功能权限和限制
+4. **权限检查**: `getOrganizationFeatures`方法基于用户订阅级别返回具体权限
+5. **动态配置**: 权限配置完全数据驱动，无需修改代码即可调整
+
+### 多地区支持
+
+1. **默认地区**: 服务默认使用CA（加拿大）地区和CAD货币
+2. **地区检测**: 支持通过API参数传递region，自动映射对应货币
+3. **价格管理**: Price表支持多地区定价，每个地区可有不同价格
+4. **Stripe集成**: 支持多地区Stripe账户配置（可选）
+
+### 订阅过期逻辑
+
+1. **正常过期**: 基于`currentPeriodEnd`字段判断订阅是否过期
+2. **宽限期**: 支持`gracePeriodEnd`字段，过期后给予额外宽限期
+3. **状态管理**: 过期后自动将订阅状态更新为`expired`
+4. **功能限制**: 过期订阅无法使用付费功能，但可保留基本访问
+
+### Trial管理逻辑
+
+1. **Trial限制**: 每个组织只能使用一次trial，通过`hasUsedTrial`字段控制
+2. **Trial创建**: 创建trial订阅时，同时标记`organization.hasUsedTrial=true`
+3. **Trial转换**: Webhook接收到付费后，自动将trial转为付费订阅
+
+### Intent防竞态机制
+
+1. **Intent创建**: 所有付费操作先创建pending intent，包含地区和货币信息
+2. **Stripe集成**: 创建Checkout Session，metadata包含intentId和地区信息
+3. **Webhook处理**: 接收Stripe事件后，更新intent为completed
+4. **订阅更新**: 基于intent信息更新本地订阅状态
+
+### 乐观锁机制
+
+订阅更新使用version字段实现乐观锁：
+```javascript
+// 更新订阅时检查版本
+const updated = await prisma.subscription.update({
+  where: {
+    id: subscriptionId,
+    version: currentVersion
+  },
+  data: {
+    status: 'active',
+    version: currentVersion + 1
+  }
+});
+
+if (!updated) {
+  // 版本冲突，重试逻辑
+}
+```
+
+### 审计日志系统
+
+1. **全面记录**: 记录所有敏感操作（订阅创建、更新、取消等）
+2. **操作者追踪**: 区分用户操作、管理员操作、Webhook操作和系统操作
+3. **变更详情**: 记录具体的字段变更内容，支持合规审计
+4. **元数据支持**: 支持附加元数据，如工单号、原因等
+
+## 🧪 测试
+
+### 运行测试
+```bash
+# 单元测试
+npm test
+
+# 集成测试
+npm run test:integration
+
+# 测试覆盖率
+npm run test:coverage
+```
+
+### 测试用例要求
+
+必须包含以下测试用例：
+
+1. **JWT验证**:
+   - 有效token验证
+   - 无效token拒绝
+   - 过期token处理
+
+2. **组织同步**:
+   - 新组织创建
+   - 现有组织更新
+   - 用户ID冲突处理
+
+3. **Trial管理**:
+   - 首次trial创建
+   - 重复trial拒绝
+   - Trial过期处理
+
+4. **Intent流程**:
+   - Intent创建和过期
+   - Webhook更新Intent
+   - 竞态条件处理
+
+5. **Webhook处理**:
+   - 事件幂等性 (必须包含重复事件处理测试)
+   - 订阅状态同步
+   - 错误处理和重试
+   - 并发事件处理 (同时收到相同事件)
+   - 事件顺序错乱处理
+
+**Webhook 幂等性测试示例**
+
+```typescript
+describe('Webhook幂等性', () => {
+  const testEvent = {
+    id: 'evt_test_123',
+    type: 'invoice.payment_succeeded',
+    data: { object: { subscription: 'sub_test_123' } }
+  };
+
+  it('should process the same event only once', async () => {
+    // 第一次请求成功处理
+    const res1 = await request(app)
+      .post('/webhooks/stripe')
+      .set('Stripe-Signature', 'valid_signature')
+      .send(testEvent);
+    expect(res1.status).toBe(200);
+
+    // 第二次请求应跳过，返回"Event already processed"
+    const res2 = await request(app)
+      .post('/webhooks/stripe')
+      .set('Stripe-Signature', 'valid_signature')
+      .send(testEvent);
+    expect(res2.status).toBe(200);
+
+    // 数据库中该事件只记录一条处理结果
+    const record = await prisma.stripeEventProcessed.findUnique({
+      where: { eventId: 'evt_test_123' }
+    });
+    expect(record?.processed).toBe(true);
+    expect(record?.attempts).toBeGreaterThanOrEqual(2); // 被尝试处理2次
+  });
+})
+```
+
+> 注：`attempts` 字段记录了事件尝试处理的次数，即使事件只被真正处理一次，也会递增，用于排查重试/并发情况。
+
+  it('should handle concurrent duplicate requests', async () => {
+    // 并发发送相同事件
+    const promises = Array(3).fill(null).map(() =>
+      request(app)
+        .post('/webhooks/stripe')
+        .set('Stripe-Signature', 'valid_signature')
+        .send(testEvent)
+    );
+
+    const results = await Promise.all(promises);
+
+    // 所有请求返回成功，但只处理一次
+    results.forEach(r => expect(r.status).toBe(200));
+
+    // 验证数据库中只有一条记录
+    const records = await prisma.stripeEventProcessed.findMany({
+      where: { eventId: 'evt_test_123' }
+    });
+    expect(records).toHaveLength(1);
+  });
+});
+```
+
+## 📊 监控与日志
+
+### 结构化日志
+
+使用Winston进行结构化日志记录：
+
+```javascript
+logger.info('Subscription intent created', {
+  intentId: intent.id,
+  organizationId,
+  productId,
+  actionType
+});
+
+logger.error('Failed to process webhook', {
+  error: error.message,
+  eventId: event.id,
+  eventType: event.type
+});
+```
+
+### 关键指标监控
+
+- Intent创建数量和成功率
+- Webhook处理延迟和成功率
+- Trial转换率
+- 订阅状态分布
+- API响应时间和错误率
+
+## 🚀 部署
 
 ### Docker部署
 
@@ -1017,184 +894,196 @@ curl -X GET http://localhost:8088/api/subscription-service/v1/admin/organization
 # 构建镜像
 docker build -t subscription-service .
 
-# 运行容器
+# 运行服务
 docker run -d \
   --name subscription-service \
   -p 8088:8088 \
   --env-file .env \
-  --network tymoe-network \
   subscription-service
 ```
 
-### Docker Compose
+### 环境检查清单
 
-```yaml
-version: '3.8'
-services:
-  subscription-service:
-    build: .
-    ports:
-      - "8088:8088"
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/subscription_service
-      - REDIS_URL=redis://redis:6379/1
-      - AUTH_SERVICE_URL=http://auth-service:8087
-    depends_on:
-      - postgres
-      - redis
-      - auth-service
-    networks:
-      - tymoe-network
+部署前确认：
+- [ ] 所有必需环境变量已设置
+- [ ] 数据库迁移已执行
+- [ ] Stripe Webhook已配置
+- [ ] JWKS URL可访问
+- [ ] 日志级别适合环境
+- [ ] 监控和告警已设置
 
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: subscription_service
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - tymoe-network
+## 🔧 故障排除
 
-  redis:
-    image: redis:7-alpine
-    networks:
-      - tymoe-network
+### 常见问题
 
-networks:
-  tymoe-network:
-    driver: bridge
+1. **JWT验证失败**:
+   - 检查JWKS_URL是否可访问
+   - 验证token的iss和aud声明
+   - 确认公钥缓存是否正常
 
-volumes:
-  postgres_data:
-```
+2. **Webhook处理失败**:
+   - 验证STRIPE_WEBHOOK_SECRET
+   - 检查事件签名验证
+   - 查看重试和错误日志
 
-### 监控指标
+3. **Intent超时**:
+   - 调整INTENT_TTL_MINUTES
+   - 检查清理任务运行
+   - 监控Intent处理延迟
 
-#### 性能指标
-- **响应时间**: 95%请求 < 200ms
-- **可用性**: 99.9%
-- **错误率**: < 0.1%
-- **Stripe延迟**: webhook < 5秒处理
+4. **数据库版本冲突**:
+   - 检查乐观锁实现
+   - 监控并发更新操作
+   - 调整重试机制
 
-#### 业务指标
-- **订阅转化率**: 试用 → 付费
-- **升级率**: 基础版 → 高级版
-- **流失率**: 取消订阅率
-- **收入增长**: 月度/年度收入
-
-### 日志管理
+### 日志查看
 
 ```bash
 # 查看服务日志
 docker logs -f subscription-service
 
-# 查看特定时间段日志
-docker logs subscription-service --since="2024-01-20T10:00:00" --until="2024-01-20T11:00:00"
+# 过滤特定类型日志
+docker logs subscription-service | grep "ERROR"
 
-# 过滤错误日志
-docker logs subscription-service 2>&1 | grep "ERROR"
+# 查看审计日志
+docker logs subscription-service | grep "audit"
 ```
 
-## 🚨 故障排除
+## 📋 变更日志
 
-### 常见问题
+### v2024.12.1 - TypeScript严格检查修复 & 类型安全增强
 
-#### 1. JWT验证失败
-**问题**: `401 Unauthorized - JWT token无效`
+#### 🔧 重大修改
 
-**解决方案**:
+**TypeScript严格检查修复**
+- 🛡️ 修复所有TypeScript编译错误，确保严格模式通过
+- ⚡ 完善null安全处理，添加默认值和类型守护
+- 🔧 修复Prisma查询语法错误（unique约束名称）
+- 📦 修正ES模块导入路径（添加.js扩展名）
+
+**核心服务优化**
+- 🔄 修复subscription服务中的Promise处理和async/await问题
+- 🛠️ 更新microservicePermissionService，移除不存在的模型引用
+- ⚙️ 优化subscriptionIntent服务的类型定义和null处理
+- 🔧 修复organizationService中的接口类型匹配
+
+**数据访问层改进**
+- 📊 更新Prisma查询，使用findFirst替代错误的findUnique调用
+- 🔄 修复Price模型查询中的复合unique约束问题
+- 🛡️ 增强subscription.tier字段的null安全处理
+
+#### 🗂️ 修复的文件
+
 ```bash
-# 检查auth-service是否正常
-curl http://localhost:8087/health
+# Controllers - 11处修复
+src/controllers/frontend.ts                # 3处null安全问题
+src/controllers/subscription.ts            # 5处null安全问题
+src/controllers/organization.ts            # 2处null安全问题
 
-# 检查JWT token格式
-echo "Bearer eyJhbGciOiJSUzI1NiIs..." | base64 -d
+# Routes - 3处修复
+src/routes/microservice.ts                 # 3处null安全问题
 
-# 验证auth-service公钥获取
-curl http://localhost:8087/api/auth/public-key \
-  -H "X-API-Key: internal-key"
+# Services - 22+处修复
+src/services/subscription.ts               # 9+处复杂类型错误
+src/services/microservicePermissionService.ts # 8处模型/约束错误
+src/services/organization.ts               # 1处类型定义错误
+src/services/subscriptionIntent.service.ts # 4处导入/类型错误
+
+# Scripts - 1处修复
+src/scripts/seed-data.ts                   # 1处Prisma约束错误
+
+# Middleware - 1处修复
+src/middleware/microservicePermission.ts   # 1处参数匹配错误
+
+# Configuration - 已在v2024.12中修复
+src/config/defaults.ts                     # Currency类型修复
 ```
 
-#### 2. Stripe Webhook失败
-**问题**: 支付完成但订阅状态未更新
+#### ⚠️ 主要修复类型
 
-**解决方案**:
-```bash
-# 检查Stripe CLI连接
-stripe listen --list
+1. **Null安全处理**: 在所有可能为null的字段添加 `|| 'basic'` 等默认值
+2. **Prisma查询修复**:
+   - `findUnique` → `findFirst` (当unique约束不存在时)
+   - 移除不存在的复合约束如 `productKey_tier_billingCycle`
+   - 修复seed脚本中的错误约束使用
+3. **Promise/Async修复**: 修复subscription服务中未正确await的Promise调用
+4. **ES模块导入**: 添加缺失的.js扩展名到import语句
+5. **类型断言优化**: 使用适当的类型守护和null检查替代危险的类型断言
 
-# 验证webhook密钥
-stripe events retrieve evt_xxx
+#### ✅ 验证结果
 
-# 重新配置webhook
-stripe listen --forward-to localhost:8088/api/subscription-service/v1/webhooks/stripe
-```
+- ✅ `npm run typecheck` 通过，无TypeScript错误
+- ✅ 所有null访问都有适当的默认值处理
+- ✅ Prisma查询语法正确，匹配实际schema定义
+- ✅ ES模块导入路径完整且正确
 
-#### 3. 数据库连接问题
-**问题**: `Database connection failed`
+#### 🔗 技术影响
 
-**解决方案**:
-```bash
-# 检查数据库连接
-psql $DATABASE_URL -c "SELECT 1"
-
-# 运行数据库迁移
-npx prisma migrate reset
-npx prisma migrate deploy
-
-# 检查数据库状态
-npx prisma db seed
-```
-
-#### 4. Redis连接问题
-**问题**: `Redis connection timeout`
-
-**解决方案**:
-```bash
-# 检查Redis连接
-redis-cli -u $REDIS_URL ping
-
-# 重启Redis服务
-docker restart redis
-
-# 清除Redis缓存
-redis-cli -u $REDIS_URL flushall
-```
-
-### 错误代码参考
-
-| 错误代码 | HTTP状态码 | 说明 | 解决方案 |
-|----------|-----------|------|----------|
-| `unauthorized` | 401 | JWT token无效或过期 | 重新登录获取新token |
-| `access_denied` | 403 | 用户无权访问该组织 | 检查用户权限 |
-| `subscription_not_found` | 404 | 订阅不存在 | 先创建订阅 |
-| `trial_already_used` | 409 | 已使用过试用期 | 直接订阅付费版 |
-| `invalid_product` | 400 | 产品类型错误 | 使用ploml或mopai |
-| `server_error` | 500 | 服务器内部错误 | 查看日志排查 |
-
-### 性能优化建议
-
-1. **缓存策略**
-   - JWT公钥缓存1小时
-   - 订阅状态缓存15分钟
-   - 功能权限缓存5分钟
-
-2. **数据库优化**
-   - 为常用查询添加索引
-   - 使用连接池
-   - 定期清理过期数据
-
-3. **监控告警**
-   - 设置响应时间告警
-   - 监控数据库连接数
-   - 跟踪Stripe webhook延迟
+- **代码安全性**: 消除了潜在的运行时null错误
+- **类型安全**: 确保严格TypeScript检查通过
+- **开发体验**: IDE现在可以提供准确的类型提示
+- **构建稳定性**: CI/CD流程中的TypeScript检查将保持通过
 
 ---
 
-**相关文档**:
-- [前端集成指南](./README_for_frontend.md)
+### v2024.12 - TypeScript类型安全 & 软删除支持
 
-**技术支持**: 如遇问题请查看日志或联系开发团队
+#### 🔧 重大修改
+
+**数据库Schema更新**
+- 📊 添加 `deletedAt` 字段到 `Organization` 和 `Subscription` 模型，支持软删除
+- 🔄 增强 `StripeEventProcessed` 模型的 `attempts` 字段支持，用于webhook重试追踪
+
+**TypeScript类型优化**
+- 🛡️ 修复货币/地区类型不匹配问题（`Currency` 类型定义）
+- ⚡ 更新Prisma客户端类型，确保类型安全
+- 🔧 修复webhook服务中Stripe状态映射错误
+
+**Webhook幂等性增强**
+- 📈 完善attempts字段追踪，支持并发和重试场景监控
+- 🧪 更新所有webhook相关测试，包含attempts断言验证
+- 📖 更新README中的测试示例和说明文档
+
+#### 🗂️ 影响的文件
+
+```bash
+# Schema & Database
+prisma/schema.prisma                    # 添加deletedAt软删除字段
+
+# Core Services
+src/services/webhook.service.ts         # 修复状态映射错误
+src/config/defaults.ts                  # 修复Currency类型定义
+
+# Tests (增加attempts验证)
+tests/unit/webhook-idempotency.test.ts  # webhook幂等性单元测试
+tests/integration/webhook.test.ts       # webhook集成测试
+tests/unit/services/webhook.service.test.ts # webhook服务测试
+
+# Documentation
+README.md                               # 更新测试示例和attempts说明
+```
+
+#### ⚠️ 迁移注意事项
+
+1. **数据库迁移**: 新增的 `deletedAt` 字段需要数据库迁移
+2. **测试更新**: 所有webhook测试现在验证 `attempts` 字段行为
+3. **类型检查**: 运行 `npm run typecheck` 确保类型安全
+
+#### 🔗 相关PR/Issue
+- Webhook幂等性增强和TypeScript类型修复
+- 软删除支持和数据完整性改进
+
+---
+
+## 📚 相关文档
+
+- [Stripe API文档](https://stripe.com/docs/api)
+- [Prisma文档](https://www.prisma.io/docs/)
+- [JWT最佳实践](https://tools.ietf.org/html/rfc7519)
+- [企业级Node.js架构](https://nodejs.org/en/docs/guides/nodejs-enterprise-best-practices/)
+
+---
+
+**技术栈**: Node.js 20+ • TypeScript • Express • Prisma • PostgreSQL • Stripe SDK • JWT
+
+**联系方式**: 如需技术支持，请查看日志或联系开发团队

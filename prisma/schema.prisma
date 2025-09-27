@@ -7,85 +7,108 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 简化的组织订阅模型
+// Organization model - 必须包含要求的字段
 model Organization {
-  id                String   @id @default(cuid())
-  name              String
-  stripeCustomerId  String?  @unique @map("stripe_customer_id")
-  hasUsedTrial      Boolean  @default(false) @map("has_used_trial")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id               String   @id // orgId from JWT
+  userId           String?  // sub from JWT - temporarily optional for migration
+  name             String
+  stripeCustomerId String?  @unique @map("stripe_customer_id")
+  hasUsedTrial     Boolean  @default(false) @map("has_used_trial")
+  deletedAt        DateTime? @map("deleted_at") // 软删除字段
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
-  subscriptions       Subscription[]
-  microserviceUsage   MicroserviceUsage[]
-  concurrentRequests  ConcurrentRequests[]
+  subscriptions         Subscription[]
+  microserviceUsage     MicroserviceUsage[]
 
   @@map("organizations")
+  @@index([userId])
 }
 
-// 产品线：ploml（美业）、mopai（餐饮）
+// Product model - 使用key字段 (string类型)
 model Product {
-  key       String   @id // "ploml" | "mopai"
-  name      String   // "Ploml Beauty Management" | "Mopai F&B Management"
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  key         String   @id // 例如: "ploml-basic", "mopai-trial"
+  name        String   // 显示名称
+  description String?
+  price       Int?     // canonical price in cents
+  currency    String?  @default("usd")
+  interval    String?  // "monthly" | "yearly"
+  intervalCount Int?
+  levelKey    String?  @map("level_key") // 关联到Level表
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  subscriptions Subscription[]
+  level         Level?   @relation(fields: [levelKey], references: [key])
   prices        Price[]
+  subscriptions Subscription[]
 
   @@map("products")
+  @@index([levelKey])
 }
 
-// 订阅计划
-model Subscription {
-  id                    String    @id @default(cuid())
-  organizationId        String    @map("organization_id")
-  productKey            String    @map("product_key")
-  tier                  String    // "trial" | "basic" | "standard" | "advanced" | "pro"
-  status                String    // "trialing" | "active" | "past_due" | "canceled" | "incomplete"
-  billingCycle          String?   @map("billing_cycle") // "monthly" | "yearly"
-  currentPeriodStart    DateTime? @map("current_period_start")
-  currentPeriodEnd      DateTime? @map("current_period_end")
-  trialEnd              DateTime? @map("trial_end")
-  stripeSubscriptionId  String?   @unique @map("stripe_subscription_id")
-  stripePriceId         String?   @map("stripe_price_id")
-  cancelAtPeriodEnd     Boolean   @default(false) @map("cancel_at_period_end")
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  product      Product      @relation(fields: [productKey], references: [key])
-  price        Price?       @relation(fields: [stripePriceId], references: [stripePriceId])
-
-  @@unique([organizationId, productKey])
-  @@map("subscriptions")
-}
-
-// Stripe价格配置
+// Price model
 model Price {
   id            String  @id @default(cuid())
-  stripePriceId String  @unique @map("stripe_price_id")
+  stripePriceId String? @unique
   productKey    String  @map("product_key")
-  tier          String  // "basic" | "standard" | "advanced" | "pro"
-  billingCycle  String  @map("billing_cycle") // "monthly" | "yearly"
-  amount        Int     // 价格（分）
-  currency      String  @default("usd")
+  tier          String?
+  billingCycle  String? // monthly/yearly
+  amount        Int?
+  currency      String? @default("cad")
+  region        String? @default("CA") // CA, US, EU等
   active        Boolean @default(true)
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  product       Product        @relation(fields: [productKey], references: [key])
-  subscriptions Subscription[]
+  product       Product @relation(fields: [productKey], references: [key])
 
-  @@unique([productKey, tier, billingCycle])
   @@map("prices")
+  @@index([productKey])
+  @@index([region])
 }
 
-// 微服务使用量跟踪
+// Subscription model - 必须包含指定字段
+model Subscription {
+  id                   String             @id @default(cuid())
+  organizationId       String             @map("organization_id")
+  productKey           String             @map("product_key")
+  status               SubscriptionStatus // 订阅状态枚举
+  tier                 String?
+  billingCycle         String?  // "monthly" | "yearly"
+  startDate            DateTime? @map("start_date") // temporarily optional for migration
+  endDate              DateTime? @map("end_date")
+  gracePeriodEnd       DateTime? @map("grace_period_end") // 宽限期结束时间
+  currentPeriodStart   DateTime? @map("current_period_start")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  trialEnd             DateTime? @map("trial_end")
+  stripeSubscriptionId String?  @unique @map("stripe_subscription_id")
+  stripePriceId        String?  @map("stripe_price_id")
+  cancelAtPeriodEnd    Boolean  @default(false) @map("cancel_at_period_end")
+  version              Int      @default(1) // 乐观锁
+  lastWebhookEventId   String?  @map("last_webhook_event_id") // 必须字段
+  lastSyncedAt         DateTime? @map("last_synced_at")
+  deletedAt            DateTime? @map("deleted_at") // 软删除字段
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  product      Product      @relation(fields: [productKey], references: [key])
+  microserviceUsage MicroserviceUsage[]
+
+  @@map("subscriptions")
+  @@index([organizationId])
+  @@index([stripeSubscriptionId])
+  @@index([status])
+  @@index([gracePeriodEnd])
+  @@unique([organizationId, productKey])
+}
+
+// MicroserviceUsage model
 model MicroserviceUsage {
   id             String   @id @default(cuid())
   organizationId String   @map("organization_id")
+  subscriptionId String   @map("subscription_id")
   serviceKey     String   @map("service_key") // auth_service, notification_service等
   usagePeriod    String   @map("usage_period") // "YYYY-MM-DD" (daily) | "YYYY-MM-DD-HH" (hourly) | "YYYY-MM" (monthly)
   periodType     String   @map("period_type") // "hourly" | "daily" | "monthly"
@@ -94,23 +117,127 @@ model MicroserviceUsage {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
-  @@unique([organizationId, serviceKey, usagePeriod, periodType])
+  @@unique([subscriptionId, serviceKey, usagePeriod, periodType])
   @@index([organizationId, serviceKey, periodType])
+  @@index([subscriptionId])
   @@map("microservice_usage")
 }
 
-// 实时并发请求跟踪
-model ConcurrentRequests {
-  id             String   @id @default(cuid())
-  organizationId String   @map("organization_id")
-  serviceKey     String   @map("service_key")
-  requestId      String   @map("request_id") // 唯一标识每个请求
-  startedAt      DateTime @default(now()) @map("started_at")
+// SubscriptionIntent model - 必须包含
+model SubscriptionIntent {
+  id                   String   @id @default(cuid())
+  organizationId       String   @map("organization_id")
+  productKey           String   @map("product_key")
+  action               String   // "CHECKOUT" | "UPGRADE" | "CANCEL" | "REACTIVATE" | "START_TRIAL"
+  status               String   // "PENDING" | "COMPLETED" | "FAILED" | "EXPIRED"
+  stripePriceId        String?  @map("stripe_price_id")
+  stripeCheckoutId     String?  @unique @map("stripe_checkout_id")
+  stripeSubscriptionId String?  @map("stripe_subscription_id")
+  metadata             Json?    // 存储额外信息
+  version              Int      @default(1) // 乐观锁
+  expiresAt            DateTime @map("expires_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@map("subscription_intents")
+  @@index([organizationId])
+  @@index([stripeCheckoutId])
+  @@index([status, expiresAt])
+}
 
-  @@unique([organizationId, serviceKey, requestId])
-  @@index([organizationId, serviceKey])
-  @@map("concurrent_requests")
+// StripeEventProcessed model - 必须包含，用于Webhook幂等性
+model StripeEventProcessed {
+  id          String   @id @default(cuid())
+  eventId     String   @unique @map("event_id") // Stripe event ID
+  eventType   String   @map("event_type")      // invoice.payment_succeeded等
+  processed   Boolean  @default(true)
+  attempts    Int      @default(1)             // 尝试处理次数，用于追踪并发和重试
+  processedAt DateTime @default(now()) @map("processed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("stripe_events_processed")
+  @@index([eventType])
+  @@index([processedAt])
+}
+
+// AuditLog model - 审计日志
+model AuditLog {
+  id            String   @id @default(cuid())
+  entityType    String   @map("entity_type") // "SUBSCRIPTION" | "ORGANIZATION" | "TRIAL"
+  entityId      String   @map("entity_id") // 被操作实体的ID
+  action        String   // "CREATE" | "UPDATE" | "DELETE" | "CANCEL" | "REACTIVATE"
+  actorType     String   @map("actor_type") // "USER" | "ADMIN" | "WEBHOOK" | "SYSTEM"
+  actorId       String?  @map("actor_id") // 操作者ID (可为空，如系统操作)
+  changes       Json?    // 变更的字段和值
+  metadata      Json?    // 额外元数据，如请求IP、User-Agent等
+  timestamp     DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorType, actorId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+// Level model - 套餐层级
+model Level {
+  key         String   @id // trial, basic, standard, advanced, pro
+  name        String   // 显示名称
+  description String?  // 描述
+  sortOrder   Int      @default(0) @map("sort_order") // 排序
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  products      Product[]
+  entitlements  Entitlement[]
+
+  @@map("levels")
+  @@index([sortOrder])
+}
+
+// Feature model - 功能点
+model Feature {
+  key         String   @id // team_size, ai_requests_per_month, priority_support
+  name        String   // 显示名称
+  description String?  // 描述
+  type        String   // "BOOLEAN" | "NUMBER" | "STRING" 功能类型
+  unit        String?  // 单位，如 "users", "requests", 等
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  entitlements Entitlement[]
+
+  @@map("features")
+}
+
+// Entitlement model - 权限配置
+model Entitlement {
+  id          String   @id @default(cuid())
+  levelKey    String   @map("level_key")
+  featureKey  String   @map("feature_key")
+  isEnabled   Boolean  @default(true) @map("is_enabled") // 是否启用此功能
+  limit       Int?     // 限制数量 (null表示无限制)
+  metadata    Json?    // 额外配置
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  level       Level    @relation(fields: [levelKey], references: [key], onDelete: Cascade)
+  feature     Feature  @relation(fields: [featureKey], references: [key], onDelete: Cascade)
+
+  @@unique([levelKey, featureKey])
+  @@index([levelKey])
+  @@index([featureKey])
+  @@map("entitlements")
+}
+
+// 订阅状态枚举
+enum SubscriptionStatus {
+  TRIALING  // 试用期
+  ACTIVE    // 活跃
+  PAST_DUE  // 逾期
+  CANCELED  // 已取消
+  EXPIRED   // 已过期
 }
