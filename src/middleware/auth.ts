@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { service } from '../config/config.js';
 import * as jwt from 'jsonwebtoken';
-import { JWTPayload, AuthenticatedRequest } from '../types/index.js';
+import { JWTPayload } from '../types/index.js';
+import { AuthenticatedRequest } from '../types/index.js';
 
-const jwksClient = require('jwks-rsa');
+import jwksClient from 'jwks-rsa';
 
-// Export the AuthenticatedRequest type for use in controllers
-export { AuthenticatedRequest };
+// The AuthenticatedRequest type is exported from types/index.ts
 
 const client = jwksClient({
   jwksUri: 'https://tymoe.com/jwks.json',
@@ -130,7 +130,10 @@ export function verifyJwtMiddleware(req: Request, res: Response, next: NextFunct
     organizationName = firstOrg.name;
 
     (req as AuthenticatedRequest).user = {
-      userId,
+      id: userId,
+      email: payload.email || '',
+      iat: payload.iat || 0,
+      exp: payload.exp || 0,
       organizationId,
       organizationName
     };

@@ -10,12 +10,15 @@ export interface JWTPayload {
   [key: string]: any;
 }
 
-// 扩展Request类型以包含JWT解析的信息
+// AuthenticatedRequest interface for middleware
 export interface AuthenticatedRequest extends Request {
   user: {
-    userId: string;
-    organizationId: string;
-    organizationName: string;
+    id: string;
+    email: string;
+    iat: number;
+    exp: number;
+    organizationId?: string | undefined;
+    organizationName?: string | undefined;
   };
 }
 

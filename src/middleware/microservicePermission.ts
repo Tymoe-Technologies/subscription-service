@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthenticatedRequest } from './jwt.js';
+import { AuthenticatedRequest } from '../types/index.js';
 import { microservicePermissionService } from '../services/microservicePermissionService.js';
 import { subscriptionService } from '../services/subscription.js';
 import { logger } from '../utils/logger.js';

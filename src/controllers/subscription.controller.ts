@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { AuthenticatedRequest } from '../middleware/auth';
+import { AuthenticatedRequest } from '../types/index.js';
 import { subscriptionService } from '../services/subscription.service';
 import { organizationService } from '../services/organization.service';
 import { subscriptionIntentService } from '../services/subscriptionIntent.service';
@@ -12,7 +12,7 @@ export class SubscriptionController {
   async createSubscription(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { organizationId, productKey } = req.body;
-      const userId = req.user.userId;
+      const userId = req.user.id;
 
       if (!organizationId || !productKey) {
         res.status(400).json({
@@ -56,7 +56,7 @@ export class SubscriptionController {
         error: error instanceof Error ? error.message : String(error),
         organizationId: req.body.organizationId,
         productKey: req.body.productKey,
-        userId: req.user.userId
+        userId: req.user.id
       });
 
       const statusCode = error instanceof Error && error.message === 'Trial already used' ? 409 : 500;
@@ -82,7 +82,7 @@ export class SubscriptionController {
         successUrl,
         cancelUrl
       } = req.body;
-      const userId = req.user.userId;
+      const userId = req.user.id;
 
       if (!organizationId || !productKey) {
         res.status(400).json({
@@ -127,7 +127,7 @@ export class SubscriptionController {
         error: error instanceof Error ? error.message : String(error),
         organizationId: req.body.organizationId,
         productKey: req.body.productKey,
-        userId: req.user.userId
+        userId: req.user.id
       });
 
       res.status(500).json({
@@ -265,7 +265,7 @@ export class SubscriptionController {
           subscriptionId: id,
           cancelAtPeriodEnd,
           reason,
-          userId: req.user.userId
+          userId: req.user.id
         }
       });
 
@@ -316,7 +316,7 @@ export class SubscriptionController {
         action: SUBSCRIPTION_INTENT_ACTION.REACTIVATE,
         metadata: {
           subscriptionId: id,
-          userId: req.user.userId
+          userId: req.user.id
         }
       });
 
@@ -353,7 +353,7 @@ export class SubscriptionController {
       // Sync organization first
       await organizationService.syncOrganizationIfNotExists(
         { id: organizationId, name: req.body.name || 'Organization' },
-        req.user.userId
+        req.user.id
       );
 
       // Create checkout intent
@@ -364,7 +364,7 @@ export class SubscriptionController {
         stripePriceId,
         region: req.body.region,
         metadata: {
-          userId: req.user.userId,
+          userId: req.user.id,
           successUrl,
           cancelUrl
         }

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { AuthenticatedRequest } from '../middleware/auth';
+import { AuthenticatedRequest } from '../types/index.js';
 import { organizationService } from '../services/organization.service';
 import { stripeService } from '../infra/stripe';
 import { logger } from '../utils/logger';
@@ -29,7 +29,7 @@ export class OrganizationController {
     } catch (error) {
       logger.error('Organization sync failed', {
         error: error instanceof Error ? error.message : String(error),
-        userId: req.user.userId
+        userId: req.user.id
       });
 
       res.status(500).json({
@@ -86,7 +86,7 @@ export class OrganizationController {
       logger.error('Stripe customer update failed', {
         error: error instanceof Error ? error.message : String(error),
         organizationId: req.params.id,
-        userId: req.user.userId
+        userId: req.user.id
       });
 
       res.status(500).json({

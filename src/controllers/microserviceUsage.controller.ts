@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { AuthenticatedRequest } from '../middleware/auth';
+import { AuthenticatedRequest } from '../types/index.js';
 import { microserviceUsageService } from '../services/microserviceUsage.service';
 import { logger } from '../utils/logger';
 
@@ -55,8 +55,16 @@ export class MicroserviceUsageController {
   // GET /usage/stats
   async getUsageStats(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { organizationId } = req.user;
+      const organizationId = req.user.organizationId || req.query.organizationId as string;
       const { serviceKey, periodType, startPeriod, endPeriod, limit } = req.query;
+
+      if (!organizationId) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'missing_organization_id', message: 'Organization ID is required' }
+        });
+        return;
+      }
 
       const stats = await microserviceUsageService.getUsageStats({
         organizationId,
@@ -88,8 +96,16 @@ export class MicroserviceUsageController {
   // GET /usage/by-service
   async getUsageByService(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { organizationId } = req.user;
+      const organizationId = req.user.organizationId || req.query.organizationId as string;
       const { periodType, startPeriod, endPeriod } = req.query;
+
+      if (!organizationId) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'missing_organization_id', message: 'Organization ID is required' }
+        });
+        return;
+      }
 
       if (!periodType) {
         res.status(400).json({
@@ -127,8 +143,16 @@ export class MicroserviceUsageController {
   // GET /usage/trends
   async getUsageTrends(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { organizationId } = req.user;
+      const organizationId = req.user.organizationId || req.query.organizationId as string;
       const { serviceKey, periodType, limit } = req.query;
+
+      if (!organizationId) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'missing_organization_id', message: 'Organization ID is required' }
+        });
+        return;
+      }
 
       if (!serviceKey || !periodType) {
         res.status(400).json({
@@ -166,9 +190,17 @@ export class MicroserviceUsageController {
   // GET /usage/current/:serviceKey
   async getCurrentUsage(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { organizationId } = req.user;
+      const organizationId = req.user.organizationId || req.query.organizationId as string;
       const { serviceKey } = req.params;
       const { periodType } = req.query;
+
+      if (!organizationId) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'missing_organization_id', message: 'Organization ID is required' }
+        });
+        return;
+      }
 
       if (!serviceKey || !periodType) {
         res.status(400).json({

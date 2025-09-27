@@ -1,16 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import { authServiceClient } from '../services/authService.js';
 import { logger } from '../utils/logger.js';
-
-export interface AuthenticatedRequest extends Request {
-  user: {
-    id: string;
-    email: string;
-    iat: number;
-    exp: number;
-  };
-}
+import { AuthenticatedRequest } from '../types/index.js';
 
 export async function validateUserJWT(
   req: Request,
@@ -49,6 +41,8 @@ export async function validateUserJWT(
       email: payload.email,
       iat: typeof payload.iat === 'number' ? payload.iat : 0,
       exp: typeof payload.exp === 'number' ? payload.exp : 0,
+      organizationId: undefined,
+      organizationName: undefined,
     };
 
     logger.debug('JWT验证成功', {

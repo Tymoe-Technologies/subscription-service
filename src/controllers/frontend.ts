@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { AuthenticatedRequest } from '../middleware/jwt.js';
+import { AuthenticatedRequest } from '../types/index.js';
 import { organizationService } from '../services/organization.js';
 import { subscriptionService } from '../services/subscription.js';
 import { hasFeatureAccess, getTierFeatures } from '../config/features.js';
