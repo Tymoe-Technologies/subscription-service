@@ -357,11 +357,152 @@ model AuditLog {
 
 ## 📖 API文档
 
-### 🎯 前端用户API（需要JWT认证）
+### 🌐 API基础信息
 
-基础路径：`/api/frontend`
+**服务基础URL**: `http://localhost:8088` (开发环境)
 
-所有前端API需要JWT Bearer Token认证：
+**API版本化路径**: `/api/subscription-service/v1`
+
+**完整基础路径**: `http://localhost:8088/api/subscription-service/v1`
+
+### 📋 API分类及使用规则
+
+| API类型 | 路径前缀 | 调用方 | 认证方式 | 用途 |
+|---------|----------|--------|----------|------|
+| 🎯 **前端用户API** | `/frontend/*` | 前端应用 | JWT Token | 用户管理组织、订阅操作 |
+| 🔧 **内部订阅API** | `/subscriptions/*`, `/organizations/*` | 内部微服务 | JWT Token | 微服务间订阅查询 |
+| 🔍 **微服务权限API** | `/microservices/*`, `/usage/*` | 内部微服务 | JWT Token | 权限检查、使用统计 |
+| 🔗 **Webhook API** | `/webhooks/*` | Stripe服务 | Stripe签名 | 支付状态同步 |
+| 🛡️ **管理员API** | `/admin/*` | 运维工具 | API Key | 运维管理、故障修复 |
+
+### 📌 详细使用场景说明
+
+#### 🎯 前端用户API - 用户直接调用场景
+**谁来调用**: 前端React应用（用户浏览器）
+**调用时机**: 用户在前端界面进行操作时
+**典型场景**:
+- 用户登录后查看自己的组织列表
+- 用户创建新的店铺组织
+- 用户查看产品定价信息
+- 用户启动试用或升级订阅
+- 用户取消订阅
+
+**示例调用**:
+```javascript
+// 前端JavaScript代码
+const token = localStorage.getItem('jwt_token');
+const response = await fetch('/api/subscription-service/v1/frontend/user/organizations-overview', {
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  }
+});
+```
+
+#### 🔧 内部订阅API - 微服务间调用场景
+**谁来调用**: 其他内部微服务（auth-service, ploml-service, mopai-service等）
+**调用时机**: 微服务需要查询用户订阅状态时
+**典型场景**:
+- auth-service验证用户权限时查询订阅状态
+- ploml-service检查用户是否有权限访问高级功能
+- mopai-service验证API调用额度
+- 定时任务同步订阅状态
+
+**示例调用**:
+```javascript
+// 微服务内部调用
+const serviceToken = process.env.SERVICE_JWT_TOKEN;
+const subscription = await fetch('/api/subscription-service/v1/subscriptions/organization/org-123/product/ploml', {
+  headers: {
+    'Authorization': `Bearer ${serviceToken}`,
+    'Content-Type': 'application/json'
+  }
+});
+```
+
+#### 🔍 微服务权限API - 权限检查场景
+**谁来调用**: 内部微服务（实时权限检查）
+**调用时机**: 每次API请求前进行权限验证
+**典型场景**:
+- API网关检查请求权限
+- 微服务中间件验证功能访问权限
+- 实时检查API调用频率限制
+- 获取使用统计数据
+
+**示例调用**:
+```javascript
+// 微服务权限中间件
+app.use('/api/ploml', async (req, res, next) => {
+  const permissionCheck = await fetch('/api/subscription-service/v1/microservices/check-permission', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${req.headers.authorization}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      organizationId: req.headers['x-organization-id'],
+      serviceKey: 'ploml-service'
+    })
+  });
+
+  if (!permissionCheck.allowed) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  next();
+});
+```
+
+#### 🔗 Webhook API - 外部服务调用场景
+**谁来调用**: Stripe支付服务
+**调用时机**: 支付状态发生变化时（自动触发）
+**典型场景**:
+- 用户完成支付后，Stripe通知订阅激活
+- 订阅续费成功或失败
+- 用户取消订阅
+- 支付失败需要重试
+
+**Stripe配置示例**:
+```bash
+# Stripe Dashboard Webhook配置
+Endpoint URL: https://api.tymoe.com/api/subscription-service/v1/webhooks/stripe
+Events: customer.subscription.created, customer.subscription.updated, customer.subscription.deleted, invoice.payment_succeeded, invoice.payment_failed
+```
+
+#### 🛡️ 管理员API - 运维调用场景
+**谁来调用**: 运维工具、管理后台、客服系统
+**调用时机**: 需要手动干预或故障修复时
+**典型场景**:
+- 客服帮助用户恢复被误删的订阅
+- 运维修复数据不一致问题
+- 批量处理订阅状态
+- 查看审计日志排查问题
+
+**示例调用**:
+```javascript
+// 运维工具调用
+const response = await fetch('/api/subscription-service/v1/admin/subscriptions', {
+  method: 'POST',
+  headers: {
+    'X-API-Key': process.env.ADMIN_API_KEY,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    organizationId: 'org-123',
+    productKey: 'ploml',
+    tier: 'basic',
+    reason: '客服恢复误删订阅',
+    ticketId: 'TICKET-123'
+  })
+});
+```
+
+### 🎯 前端用户API（用户直接调用）
+
+**基础路径**: `/api/subscription-service/v1/frontend`
+
+**调用方**: 前端应用（用户浏览器）
+
+**认证**: JWT Bearer Token
 ```bash
 Authorization: Bearer {jwt_token}
 ```
@@ -370,7 +511,7 @@ Authorization: Bearer {jwt_token}
 
 ##### 获取用户所有组织概览
 ```bash
-GET /api/frontend/user/organizations-overview
+GET /api/subscription-service/v1/frontend/user/organizations-overview
 ```
 
 **功能**：获取当前用户拥有的所有组织及其订阅状态概览
@@ -409,7 +550,7 @@ GET /api/frontend/user/organizations-overview
 
 ##### 创建新组织
 ```bash
-POST /api/frontend/user/organizations
+POST /api/subscription-service/v1/frontend/user/organizations
 Content-Type: application/json
 ```
 
@@ -438,7 +579,7 @@ Content-Type: application/json
 
 ##### 获取产品定价
 ```bash
-GET /api/frontend/products/{productKey}/pricing
+GET /api/subscription-service/v1/frontend/products/{productKey}/pricing
 ```
 
 **路径参数**：
@@ -472,7 +613,7 @@ GET /api/frontend/products/{productKey}/pricing
 
 ##### 获取产品功能列表
 ```bash
-GET /api/frontend/products/{productKey}/features
+GET /api/subscription-service/v1/frontend/products/{productKey}/features
 ```
 
 **成功响应 (200)**：
@@ -496,7 +637,7 @@ GET /api/frontend/products/{productKey}/features
 
 ##### 获取组织订阅状态
 ```bash
-GET /api/frontend/organizations/{organizationId}/subscription-status
+GET /api/subscription-service/v1/frontend/organizations/{organizationId}/subscription-status
 ```
 
 **成功响应 (200)**：
@@ -520,7 +661,7 @@ GET /api/frontend/organizations/{organizationId}/subscription-status
 
 ##### 检查功能权限
 ```bash
-GET /api/frontend/organizations/{organizationId}/products/{productKey}/features/{featureKey}/access
+GET /api/subscription-service/v1/frontend/organizations/{organizationId}/products/{productKey}/features/{featureKey}/access
 ```
 
 **成功响应 (200)**：
@@ -552,7 +693,7 @@ GET /api/frontend/organizations/{organizationId}/products/{productKey}/features/
 
 ##### 开始试用
 ```bash
-POST /api/frontend/organizations/{organizationId}/subscriptions/start-trial
+POST /api/subscription-service/v1/frontend/organizations/{organizationId}/subscriptions/start-trial
 Content-Type: application/json
 ```
 
@@ -591,7 +732,7 @@ Content-Type: application/json
 
 ##### 创建支付会话
 ```bash
-POST /api/frontend/organizations/{organizationId}/subscriptions/checkout
+POST /api/subscription-service/v1/frontend/organizations/{organizationId}/subscriptions/checkout
 Content-Type: application/json
 ```
 
@@ -618,7 +759,7 @@ Content-Type: application/json
 
 ##### 升级订阅
 ```bash
-POST /api/frontend/organizations/{organizationId}/subscriptions/upgrade
+POST /api/subscription-service/v1/frontend/organizations/{organizationId}/subscriptions/upgrade
 Content-Type: application/json
 ```
 
@@ -648,7 +789,7 @@ Content-Type: application/json
 
 ##### 取消订阅
 ```bash
-POST /api/frontend/organizations/{organizationId}/subscriptions/cancel
+POST /api/subscription-service/v1/frontend/organizations/{organizationId}/subscriptions/cancel
 Content-Type: application/json
 ```
 
@@ -677,20 +818,22 @@ Content-Type: application/json
 
 ---
 
-### 🔧 内部订阅API（需要内部API Key）
+### 🔧 内部订阅API（微服务间调用）
 
-基础路径：`/api/subscriptions`
+**基础路径**: `/api/subscription-service/v1/subscriptions` 和 `/api/subscription-service/v1/organizations`
 
-所有内部API需要内部API密钥：
+**调用方**: 内部微服务（auth-service, ploml-service, mopai-service等）
+
+**认证**: JWT Token（微服务间使用Service-to-Service JWT）
 ```bash
-X-Internal-API-Key: {internal_api_key}
+Authorization: Bearer {service_jwt_token}
 ```
 
 #### 试用订阅管理
 
 ##### 创建试用订阅
 ```bash
-POST /api/subscriptions/trial
+POST /api/subscription-service/v1/subscriptions/trial
 Content-Type: application/json
 ```
 
@@ -726,7 +869,7 @@ Content-Type: application/json
 
 ##### 创建付费订阅
 ```bash
-POST /api/subscriptions/paid
+POST /api/subscription-service/v1/subscriptions/paid
 Content-Type: application/json
 ```
 
@@ -754,7 +897,7 @@ Content-Type: application/json
 
 ##### 升级订阅
 ```bash
-PATCH /api/subscriptions/{subscriptionId}/upgrade
+PATCH /api/subscription-service/v1/subscriptions/{subscriptionId}/upgrade
 Content-Type: application/json
 ```
 
@@ -768,7 +911,7 @@ Content-Type: application/json
 
 ##### 取消订阅
 ```bash
-PATCH /api/subscriptions/{subscriptionId}/cancel
+PATCH /api/subscription-service/v1/subscriptions/{subscriptionId}/cancel
 Content-Type: application/json
 ```
 
@@ -783,17 +926,17 @@ Content-Type: application/json
 
 ##### 获取订阅详情
 ```bash
-GET /api/subscriptions/{subscriptionId}
+GET /api/subscription-service/v1/subscriptions/{subscriptionId}
 ```
 
 ##### 获取组织特定产品订阅
 ```bash
-GET /api/subscriptions/organization/{organizationId}/product/{productKey}
+GET /api/subscription-service/v1/subscriptions/organization/{organizationId}/product/{productKey}
 ```
 
 ##### 获取组织所有订阅
 ```bash
-GET /api/subscriptions/organization/{organizationId}
+GET /api/subscription-service/v1/subscriptions/organization/{organizationId}
 ```
 
 **成功响应 (200)**：
@@ -824,25 +967,32 @@ GET /api/subscriptions/organization/{organizationId}
 
 ##### 检查功能权限
 ```bash
-GET /api/subscriptions/organization/{organizationId}/product/{productKey}/feature/{featureKey}
+GET /api/subscription-service/v1/subscriptions/organization/{organizationId}/product/{productKey}/feature/{featureKey}
 ```
 
 ##### 获取产品定价
 ```bash
-GET /api/subscriptions/pricing/{productKey}
+GET /api/subscription-service/v1/subscriptions/pricing/{productKey}
 ```
 
 ---
 
-### 🔍 微服务权限API（需要JWT认证）
+### 🔍 微服务权限API（内部调用）
 
-基础路径：`/api/microservices`
+**基础路径**: `/api/subscription-service/v1/microservices` 和 `/api/subscription-service/v1/usage`
+
+**调用方**: 内部微服务（权限检查、使用统计）
+
+**认证**: JWT Token
+```bash
+Authorization: Bearer {jwt_token}
+```
 
 #### 权限检查
 
 ##### 检查微服务权限
 ```bash
-POST /api/microservices/check-permission
+POST /api/subscription-service/v1/microservices/check-permission
 Content-Type: application/json
 Authorization: Bearer {jwt_token}
 ```
@@ -882,7 +1032,7 @@ Authorization: Bearer {jwt_token}
 
 ##### 获取可访问的微服务列表
 ```bash
-GET /api/microservices/accessible/{organizationId}
+GET /api/subscription-service/v1/microservices/accessible/{organizationId}
 Authorization: Bearer {jwt_token}
 ```
 
@@ -909,7 +1059,7 @@ Authorization: Bearer {jwt_token}
 
 ##### 获取微服务使用统计
 ```bash
-GET /api/microservices/stats/{organizationId}?serviceKey=auth-service&periodType=daily
+GET /api/subscription-service/v1/microservices/stats/{organizationId}?serviceKey=auth-service&periodType=daily
 Authorization: Bearer {jwt_token}
 ```
 
@@ -935,13 +1085,13 @@ Authorization: Bearer {jwt_token}
 
 ##### 获取微服务使用情况
 ```bash
-GET /api/microservices/usage/{organizationId}
+GET /api/subscription-service/v1/microservices/usage/{organizationId}
 Authorization: Bearer {jwt_token}
 ```
 
 ##### 清理过期并发请求记录
 ```bash
-POST /api/microservices/cleanup-expired
+POST /api/subscription-service/v1/microservices/cleanup-expired
 ```
 
 **成功响应 (200)**：
@@ -954,11 +1104,20 @@ POST /api/microservices/cleanup-expired
 
 ---
 
-### 🔗 Webhook API
+### 🔗 Webhook API（外部服务调用）
+
+**基础路径**: `/api/subscription-service/v1/webhooks`
+
+**调用方**: Stripe服务
+
+**认证**: Stripe签名验证
+```bash
+Stripe-Signature: {stripe_signature}
+```
 
 #### Stripe Webhook
 ```bash
-POST /api/webhooks/stripe
+POST /api/subscription-service/v1/webhooks/stripe
 Content-Type: application/json
 Stripe-Signature: {stripe_signature}
 ```
@@ -989,36 +1148,38 @@ Stripe-Signature: {stripe_signature}
 
 ---
 
-### 🛡️ Admin API（需要API Key + 维护模式）
+### 🛡️ Admin API（运维工具调用）
 
-基础路径：`/api/admin`
+**基础路径**: `/api/subscription-service/v1/admin`
 
-⚠️ **重要警告**：Admin API仅限维护/修复用途，生产环境需要维护模式和API密钥。
+**调用方**: 运维工具、管理后台
 
-**认证要求**：
+**认证**: API Key + 维护模式
 ```bash
 X-API-Key: {internal_api_key}
 # 环境变量: ADMIN_MAINTENANCE_MODE=true
 ```
 
+⚠️ **重要警告**：Admin API仅限维护/修复用途，生产环境需要维护模式和API密钥。
+
 #### 组织管理
 
 ##### 创建组织
 ```bash
-POST /api/admin/organizations
+POST /api/subscription-service/v1/admin/organizations
 X-API-Key: {api_key}
 Content-Type: application/json
 ```
 
 ##### 获取组织
 ```bash
-GET /api/admin/organizations/{organizationId}
+GET /api/subscription-service/v1/admin/organizations/{organizationId}
 X-API-Key: {api_key}
 ```
 
 ##### 更新组织
 ```bash
-PATCH /api/admin/organizations/{organizationId}
+PATCH /api/subscription-service/v1/admin/organizations/{organizationId}
 X-API-Key: {api_key}
 Content-Type: application/json
 ```
@@ -1027,7 +1188,7 @@ Content-Type: application/json
 
 ##### 创建订阅（仅维护模式）
 ```bash
-POST /api/admin/subscriptions
+POST /api/subscription-service/v1/admin/subscriptions
 X-API-Key: {api_key}
 Content-Type: application/json
 ```
@@ -1036,7 +1197,7 @@ Content-Type: application/json
 
 ##### 更新订阅状态
 ```bash
-PATCH /api/admin/subscriptions/{subscriptionId}/status
+PATCH /api/subscription-service/v1/admin/subscriptions/{subscriptionId}/status
 X-API-Key: {api_key}
 Content-Type: application/json
 ```
