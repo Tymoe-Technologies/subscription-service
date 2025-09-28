@@ -18,17 +18,22 @@ export class StripeService {
 
   // 创建客户
   async createCustomer(params: {
-    email: string;
+    email?: string;
     name: string;
     organizationId: string;
   }): Promise<Stripe.Customer> {
-    return await this.stripe.customers.create({
-      email: params.email,
+    const customerData: Stripe.CustomerCreateParams = {
       name: params.name,
       metadata: {
         organizationId: params.organizationId,
       },
-    });
+    };
+
+    if (params.email) {
+      customerData.email = params.email;
+    }
+
+    return await this.stripe.customers.create(customerData);
   }
 
   // 获取客户

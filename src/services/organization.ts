@@ -7,8 +7,9 @@ import type { Organization } from '@prisma/client';
 
 export interface CreateOrganizationParams {
   id: string; // 来自auth-service的organizationId
+  userId: string; // 创建组织的用户ID
   name: string;
-  email: string; // 用于创建Stripe客户
+  email?: string; // 可选，用于创建Stripe客户
 }
 
 export interface OrganizationWithSubscriptions extends Organization {
@@ -37,7 +38,7 @@ export class OrganizationService {
 
     // 创建Stripe客户
     const stripeCustomer = await stripeService.createCustomer({
-      email: params.email,
+      ...(params.email && { email: params.email }),
       name: params.name,
       organizationId: params.id,
     });
@@ -46,6 +47,7 @@ export class OrganizationService {
     const organization = await prisma.organization.create({
       data: {
         id: params.id,
+        userId: params.userId,
         name: params.name,
         stripeCustomerId: stripeCustomer.id,
       },

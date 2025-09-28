@@ -553,30 +553,39 @@ export async function cancelUserSubscription(req: Request, res: Response): Promi
   }
 }
 
-// 创建新组织（用户选择新增店铺时）
+// 同步组织信息（从auth-service创建组织后调用）
 export async function createUserOrganization(req: Request, res: Response): Promise<void> {
   try {
     const userId = (req as AuthenticatedRequest).user.id;
-    const { name, email } = req.body;
+    const { organizationId, name, email } = req.body;
 
-    if (!name || !email) {
+    if (!organizationId || !name) {
       res.status(400).json({
         error: 'missing_required_fields',
-        message: 'Name and email are required',
+        message: 'Organization ID and name are required',
       });
       return;
     }
 
-    // Create organization with auth-service generated ID
-    const organizationId = `org_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // 检查组织是否已存在
+    const existing = await organizationService.getOrganization(organizationId);
+    if (existing) {
+      res.status(409).json({
+        error: 'organization_exists',
+        message: 'Organization already exists in subscription service',
+      });
+      return;
+    }
 
+    // 同步组织信息到subscription-service
     const organization = await organizationService.createOrganization({
-      id: organizationId,
+      id: organizationId, // 使用auth-service生成的ID
+      userId, // 记录创建用户
       name,
-      email,
+      email, // 可选字段，如果提供则用于Stripe客户创建
     });
 
-    logger.info('User created organization', {
+    logger.info('Organization synced to subscription service', {
       userId,
       organizationId: organization.id,
       organizationName: name,
@@ -585,17 +594,17 @@ export async function createUserOrganization(req: Request, res: Response): Promi
     res.status(201).json({
       success: true,
       data: { organization },
-      message: 'Organization created successfully',
+      message: 'Organization synced successfully',
     });
   } catch (error) {
-    logger.error('Failed to create organization', {
+    logger.error('Failed to sync organization', {
       userId: (req as AuthenticatedRequest).user.id,
       error: error instanceof Error ? error.message : String(error),
     });
 
     res.status(500).json({
       error: 'server_error',
-      message: 'Failed to create organization',
+      message: 'Failed to sync organization',
     });
   }
 }

@@ -7,18 +7,19 @@ import { getTierFeatures } from '../config/features.js';
 // 创建组织
 export async function createOrganization(req: Request, res: Response): Promise<void> {
   try {
-    const { id, name, email } = req.body;
+    const { id, userId, name, email } = req.body;
 
-    if (!id || !name || !email) {
+    if (!id || !userId || !name) {
       res.status(400).json({
         error: 'bad_request',
-        message: 'id, name and email are required',
+        message: 'id, userId and name are required',
       });
       return;
     }
 
     const organization = await organizationService.createOrganization({
       id,
+      userId,
       name,
       email,
     });
