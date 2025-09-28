@@ -48,7 +48,7 @@ process.on('unhandledRejection', (reason, promise) => {
 // Start the application
 main().catch((error) => {
   logger.error('Application startup failed', {
-    error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error',
+    error: error instanceof Error ? error.message : String(error),
     stack: error instanceof Error ? error.stack : undefined,
   });
   process.exit(1);

@@ -46,7 +46,7 @@ export async function validateOrganizationAccess(
     logger.error('组织权限验证失败', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user?.id,
-      error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
 
     res.status(500).json({
@@ -81,7 +81,7 @@ export async function optionalOrganizationAccess(
     logger.error('可选组织权限验证失败', {
       organizationId: req.params.organizationId,
       userId: (req as AuthenticatedRequest).user?.id,
-      error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error',
+      error: error instanceof Error ? error.message : String(error),
     });
 
     // 可选验证失败时不阻止请求，但设置无权限标记

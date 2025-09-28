@@ -41,8 +41,8 @@ function validateEnv() {
   try {
     return envSchema.parse(process.env);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      const missingVars = error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
+    if (error && typeof error === 'object' && 'issues' in error) {
+      const missingVars = (error as z.ZodError).errors.map(err => `${err.path.join('.')}: ${err.message}`);
       throw new Error(`环境变量验证失败:\n${missingVars.join('\n')}`);
     }
     throw error;

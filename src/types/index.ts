@@ -3,7 +3,15 @@ import { Request } from 'express';
 // JWT Payload 类型定义
 export interface JWTPayload {
   sub: string; // userId
-  organizations: Array<{
+  iat?: number;
+  exp?: number;
+  iss?: string;
+  aud?: string;
+  email?: string;
+  roles?: string[];
+  scopes?: string[];
+  organizationId?: string;
+  organizations?: Array<{
     id: string; // organizationId
     name: string;
   }>;

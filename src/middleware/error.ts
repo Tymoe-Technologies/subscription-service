@@ -49,7 +49,7 @@ export function errorHandler(error: ErrorWithCode, _req: Request, res: Response)
   if (error.type?.startsWith('Stripe')) {
     res.status(400).json({
       error: 'stripe_error',
-      message: error instanceof Error ? error.message : String(error) ?? 'Stripe操作失败',
+      message: error && typeof error === 'object' && 'message' in error ? error.message : String(error) ?? 'Stripe操作失败',
       code: error.code,
     });
     return;
