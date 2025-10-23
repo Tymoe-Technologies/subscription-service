@@ -3,14 +3,19 @@ import cors from 'cors';
 import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
 
-// 路由导入
+// Part 5: Webhook路由导入（需要在JSON解析之前设置）
+import { webhookRoutes } from './routes/webhook.routes.js';
+
+// 其他路由导入
 import { organizationRoutes } from './routes/organization.controller';
 import { subscriptionRoutes } from './routes/subscription.controller';
-import { webhookRoutes } from './routes/webhook.controller';
-import { adminRoutes } from './routes/admin.controller';
 import { microserviceUsageRoutes } from './routes/microserviceUsage.controller';
 import frontendRoutes from './routes/frontend.js';
 import microserviceRoutes from './routes/microservice.js';
+import adminRoutes from './routes/admin/index.js';
+import subscriptionManagementRoutes from './routes/subscriptionManagement.routes.js';
+import queryRoutes from './routes/query.routes.js';
+import internalRoutes from './routes/internal.routes.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -44,8 +49,17 @@ export function createApp(): express.Application {
   // 前端用户API（需要JWT认证）
   apiRouter.use('/frontend', frontendRoutes);
 
-  // 内部订阅管理API
-  apiRouter.use('/subscriptions', subscriptionRoutes);
+  // Part 2: 订阅管理API（需要JWT认证，userType=USER）
+  apiRouter.use('/subscriptions', subscriptionManagementRoutes);
+
+  // Part 3: 查询API（需要JWT认证，userType=USER）
+  apiRouter.use('/queries', queryRoutes);
+
+  // Part 4: 内部API（需要Service API Key）
+  apiRouter.use('/internal', internalRoutes);
+
+  // 内部订阅管理API（旧）
+  // apiRouter.use('/subscriptions', subscriptionRoutes);
   apiRouter.use('/organizations', organizationRoutes);
 
   // 微服务相关API
