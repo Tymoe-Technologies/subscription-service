@@ -20,13 +20,19 @@ export class StripeService {
   async createCustomer(params: {
     email?: string;
     name: string;
-    organizationId: string;
+    organizationId?: string;
+    metadata?: Record<string, string>;
   }): Promise<Stripe.Customer> {
+    const metadata: Record<string, string> = params.metadata || {};
+
+    // 如果提供了organizationId且metadata中没有,则添加
+    if (params.organizationId && !metadata.organizationId) {
+      metadata.organizationId = params.organizationId;
+    }
+
     const customerData: Stripe.CustomerCreateParams = {
       name: params.name,
-      metadata: {
-        organizationId: params.organizationId,
-      },
+      metadata,
     };
 
     if (params.email) {
@@ -40,7 +46,7 @@ export class StripeService {
   async getCustomer(customerId: string): Promise<Stripe.Customer | null> {
     try {
       const customer = await this.stripe.customers.retrieve(customerId);
-      return customer.deleted ? null : customer;
+      return customer.deleted ? null : (customer as Stripe.Customer);
     } catch (error) {
       logger.error('获取Stripe客户失败:', error);
       return null;
@@ -58,11 +64,28 @@ export class StripeService {
     return await this.stripe.customers.update(customerId, params);
   }
 
+  // 绑定PaymentMethod到Customer
+  async attachPaymentMethod(params: {
+    paymentMethodId: string;
+    customerId: string;
+  }): Promise<Stripe.PaymentMethod> {
+    return await this.stripe.paymentMethods.attach(params.paymentMethodId, {
+      customer: params.customerId,
+    });
+  }
+
+  // 获取PaymentMethod详情
+  async getPaymentMethod(paymentMethodId: string): Promise<Stripe.PaymentMethod> {
+    return await this.stripe.paymentMethods.retrieve(paymentMethodId);
+  }
+
   // 创建订阅
   async createSubscription(params: {
     customerId: string;
     priceId: string;
     trialPeriodDays?: number;
+    trialEnd?: number; // Unix timestamp
+    defaultPaymentMethodId?: string;
     metadata?: Record<string, string>;
   }): Promise<Stripe.Subscription> {
     const subscriptionParams: Stripe.SubscriptionCreateParams = {
@@ -73,8 +96,16 @@ export class StripeService {
       expand: ['latest_invoice.payment_intent'],
     };
 
-    if (params.trialPeriodDays) {
+    // 支持两种试用期设置方式
+    if (params.trialEnd) {
+      subscriptionParams.trial_end = params.trialEnd;
+    } else if (params.trialPeriodDays) {
       subscriptionParams.trial_period_days = params.trialPeriodDays;
+    }
+
+    // 设置默认支付方式
+    if (params.defaultPaymentMethodId) {
+      subscriptionParams.default_payment_method = params.defaultPaymentMethodId;
     }
 
     if (params.metadata) {
@@ -182,6 +213,7 @@ export class StripeService {
     successUrl: string;
     cancelUrl: string;
     trialPeriodDays?: number;
+    trialEnd?: number; // Unix timestamp - 用于激活已有Trial订阅
     metadata?: Record<string, string>;
   }): Promise<Stripe.Checkout.Session> {
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
@@ -200,7 +232,12 @@ export class StripeService {
       sessionParams.customer = params.customerId;
     }
 
-    if (params.trialPeriodDays) {
+    // 支持两种试用期设置方式
+    if (params.trialEnd) {
+      sessionParams.subscription_data = {
+        trial_end: params.trialEnd,
+      };
+    } else if (params.trialPeriodDays) {
       sessionParams.subscription_data = {
         trial_period_days: params.trialPeriodDays,
       };

@@ -160,6 +160,11 @@ test-results/
 # Backup files
 *.backup
 *.bak
+*.bak*
+
+# Documentation (not ready for commit)
+API.md
+CLAUDE.md
 
 # Prisma generated files (should be regenerated)
 prisma/migrations/*.sql

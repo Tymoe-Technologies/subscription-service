@@ -102,6 +102,21 @@ model StandardPlan {
 // 第二层:客户订阅
 // ========================================
 
+// 用户Trial状态表 - 跟踪用户级别的Trial使用权
+model UserTrialStatus {
+  id                  String    @id @default(uuid()) @db.Uuid
+  userId              String    @unique @map("user_id") @db.VarChar(100)
+  hasUsedTrial        Boolean   @default(false) @map("has_used_trial")
+  trialActivatedAt    DateTime? @map("trial_activated_at")
+  initialTrialOrgIds  Json?     @map("initial_trial_org_ids") @db.JsonB
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  @@map("user_trial_status")
+  @@index([userId])
+  @@index([hasUsedTrial])
+}
+
 // 订阅表
 model Subscription {
   id                   String   @id @default(uuid()) @db.Uuid

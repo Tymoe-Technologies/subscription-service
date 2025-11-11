@@ -9,11 +9,19 @@ import jwksClient from 'jwks-rsa';
 
 // The AuthenticatedRequest type is exported from types/index.ts
 
-const client = jwksClient({
-  jwksUri: 'https://tymoe.com/jwks.json',
-  requestHeaders: {},
-  timeout: 30000,
-});
+// TODO: jwks-rsa可能在模块加载时有问题,暂时延迟初始化
+let client: jwksClient.JwksClient | null = null;
+
+function getClient(): jwksClient.JwksClient {
+  if (!client) {
+    client = jwksClient({
+      jwksUri: 'https://tymoe.com/jwks.json',
+      requestHeaders: {},
+      timeout: 30000,
+    });
+  }
+  return client;
+}
 
 function getKey(header: jwt.JwtHeader, callback: jwt.SigningKeyCallback) {
   console.log('DEBUG: getKey called', {
@@ -22,7 +30,7 @@ function getKey(header: jwt.JwtHeader, callback: jwt.SigningKeyCallback) {
     typ: header.typ
   });
 
-  client.getSigningKey(header.kid!, (err: any, key: any) => {
+  getClient().getSigningKey(header.kid!, (err: any, key: any) => {
     if (err) {
       console.log('DEBUG: getSigningKey error', {
         error: err.message,
@@ -266,8 +274,11 @@ export function verifyJwtMiddleware(req: Request, res: Response, next: NextFunct
       iat: payload.iat || 0,
       exp: payload.exp || 0,
       organizationId,
-      organizationName
-    };
+      organizationName,
+      userType: payload.userType,
+      accountType: payload.accountType,
+      organizations: payload.organizations || [],
+    } as any;
 
     console.log('DEBUG: JWT verification completed successfully', {
       userId,
@@ -277,4 +288,37 @@ export function verifyJwtMiddleware(req: Request, res: Response, next: NextFunct
 
     next();
   });
+}
+
+/**
+ * 验证用户类型为USER (只有USER才能管理订阅)
+ * ACCOUNT类型(MANAGER/STAFF)不允许订阅
+ */
+export function requireUserType(req: Request, res: Response, next: NextFunction): void {
+  const authReq = req as AuthenticatedRequest;
+  const payload = authReq.user as any;
+
+  console.log('DEBUG: requireUserType check', {
+    userType: payload.userType,
+    sub: payload.id,
+  });
+
+  // 只允许 userType === "USER"
+  if (payload.userType !== 'USER') {
+    console.log('DEBUG: Access denied - invalid user type', {
+      userType: payload.userType,
+      accountType: payload.accountType,
+    });
+    res.status(403).json({
+      success: false,
+      error: {
+        code: 'INVALID_USER_TYPE',
+        message: 'Only USER type can manage subscriptions. ACCOUNT type is not allowed.',
+      },
+    });
+    return;
+  }
+
+  console.log('DEBUG: requireUserType passed');
+  next();
 }

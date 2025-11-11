@@ -148,7 +148,7 @@ export async function checkFeatureAccess(req: Request, res: Response): Promise<v
 }
 
 // 获取产品的定价信息
-export function getProductPricing(req: Request, res: Response): void {
+export async function getProductPricing(req: Request, res: Response): Promise<void> {
   try {
     const { productKey } = req.params;
     const userId = (req as AuthenticatedRequest).user.id;
@@ -161,21 +161,20 @@ export function getProductPricing(req: Request, res: Response): void {
       return;
     }
 
-    // 暂时返回空的定价信息，因为subscriptionService还没有getProductPricing方法
-    const pricing: unknown[] = [];
+    // 从数据库获取产品定价信息
+    const pricingData = await subscriptionService.getProductPricing(productKey);
 
     logger.debug('Get product pricing', {
       userId,
       productKey,
-      pricingCount: pricing.length,
+      levelsCount: pricingData.levels.length,
+      totalPrices: pricingData.levels.reduce((sum, level) => sum + level.prices.length, 0),
+      totalFeatures: pricingData.levels.reduce((sum, level) => sum + level.features.length, 0)
     });
 
     res.json({
       success: true,
-      data: {
-        productKey,
-        pricing,
-      },
+      data: pricingData,
     });
   } catch (error) {
     logger.error('Failed to get product pricing', {
