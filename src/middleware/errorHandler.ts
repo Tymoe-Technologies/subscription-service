@@ -7,7 +7,7 @@ export function errorHandler(
   req: Request,
   res: Response,
   next: NextFunction
-) {
+): void {
   logger.error('Request error', {
     error: error.message,
     stack: error.stack,
@@ -21,7 +21,7 @@ export function errorHandler(
 
   // 处理AppError（自定义应用错误）
   if (error instanceof AppError) {
-    return res.status(error.statusCode).json({
+    res.status(error.statusCode).json({
       success: false,
       error: {
         code: error.code,
@@ -30,6 +30,7 @@ export function errorHandler(
         ...(isDevelopment && error.stack && { stack: error.stack })
       }
     });
+    return;
   }
 
   // 处理普通Error

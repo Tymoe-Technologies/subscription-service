@@ -8,323 +8,118 @@ datasource db {
 }
 
 // ========================================
-// 第一层:产品目录
+// 第一层: 产品定义 (Plans 和 Modules)
 // ========================================
 
-// 模块表 - 功能模块定义
-model Module {
-  id           String   @id @default(uuid()) @db.Uuid
-  key          String   @unique // 模块标识: appointment, member, notification
-  name         String   @db.VarChar(100)
-  description  String?  @db.Text
-  category     String   @db.VarChar(50) // core/business/marketing/analytics
-  monthlyPrice Decimal  @map("monthly_price") @db.Decimal(10, 2) // 月费价格(CAD)
-  pricingModel String   @map("pricing_model") @db.VarChar(50) // fixed/per_usage/hybrid
-  dependencies Json     @default("[]") @db.JsonB // 依赖的其他模块keys(预留)
-  status       ModuleStatus // ACTIVE/DEPRECATED/SUSPENDED/COMING_SOON
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+// 基础订阅计划表
+model Plan {
+  id                 String   @id @default(uuid()) @db.Uuid
+  name               String   @db.VarChar(255)
+  version            String   @unique @db.VarChar(255)
+  description        String?  @db.Text
+  monthlyPrice       Decimal  @map("monthly_price") @db.Decimal(10, 2)
+  includedModuleKeys Json     @map("included_module_keys") @default("[]") @db.JsonB // 包含的模块 keys
+  trialDurationDays  Int      @map("trial_duration_days")
+  status             PlanStatus @default(ACTIVE)
+  stripePriceId      String?  @map("stripe_price_id") @db.VarChar(255)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
-  subscriptionModules SubscriptionModule[]
-  usages              Usage[]
+  @@map("plans")
+  @@index([status])
+  @@index([stripePriceId])
+}
+
+// 附加功能模块表
+model Module {
+  id            String       @id @default(uuid()) @db.Uuid
+  name          String       @db.VarChar(255)
+  version       String       @unique @db.VarChar(255)
+  description   String?      @db.Text
+  monthlyPrice  Decimal      @map("monthly_price") @db.Decimal(10, 2)
+  dependencies  Json         @default("[]") @db.JsonB // 依赖的模块列表
+  counts        Int          @default(1) // 数量/使用次数
+  status        ModuleStatus @default(ACTIVE)
+  stripePriceId String?      @map("stripe_price_id") @db.VarChar(255)
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
 
   @@map("modules")
-  @@index([key])
-  @@index([category])
   @@index([status])
-}
-
-// 资源表 - POS/Kiosk/Tablet/Manager/Staff
-model Resource {
-  id             String   @id @default(uuid()) @db.Uuid
-  type           String   @unique @db.VarChar(50) // pos/kiosk/tablet/manager/staff
-  category       String   @db.VarChar(50) // device/account
-  name           String   @db.VarChar(100)
-  monthlyPrice   Decimal  @map("monthly_price") @db.Decimal(10, 2) // 月费价格(CAD)
-  standardQuota  Int      @map("standard_quota") // Standard Plan包含数量
-  status         ResourceStatus // ACTIVE/DEPRECATED
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  subscriptionResources SubscriptionResource[]
-
-  @@map("resources")
-  @@index([type])
-  @@index([category])
-  @@index([status])
-}
-
-// 按量计费定价表 - SMS/API Call等
-model UsagePricing {
-  id          String   @id @default(uuid()) @db.Uuid
-  usageType   String   @unique @map("usage_type") @db.VarChar(50) // sms/api_call
-  displayName String   @map("display_name") @db.VarChar(100)
-  unitPrice   Decimal  @map("unit_price") @db.Decimal(10, 4) // 单价(CAD)
-  currency    String   @default("CAD") @db.VarChar(3)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  usages Usage[]
-
-  @@map("usage_pricing")
-  @@index([usageType])
-  @@index([isActive])
-}
-
-// Standard Plan配置表（支持多版本）
-model StandardPlan {
-  id                  String              @id @default(uuid()) @db.Uuid
-  name                String              @db.VarChar(100)
-  version             String              @unique @db.VarChar(50)
-  description         String?             @db.Text
-  monthlyPrice        Decimal             @map("monthly_price") @db.Decimal(10, 2)
-  includedModuleKeys  Json                @map("included_module_keys") @default("[]") @db.JsonB
-  resourceQuotas      Json                @map("resource_quotas") @db.JsonB
-  trialDurationDays   Int                 @map("trial_duration_days")
-  trialSmsQuota       Int                 @map("trial_sms_quota")
-  status              StandardPlanStatus
-  activatedAt         DateTime?           @map("activated_at")
-  archivedAt          DateTime?           @map("archived_at")
-  deletedAt           DateTime?           @map("deleted_at")
-  deletedBy           String?             @map("deleted_by") @db.VarChar(100)
-  createdBy           String?             @map("created_by") @db.VarChar(100)
-  createdAt           DateTime            @default(now()) @map("created_at")
-  updatedAt           DateTime            @updatedAt @map("updated_at")
-
-  @@map("standard_plan")
-  @@index([status])
-  @@index([activatedAt])
-  @@index([deletedAt])
+  @@index([stripePriceId])
 }
 
 // ========================================
-// 第二层:客户订阅
+// 第二层: 用户和订阅
 // ========================================
 
-// 用户Trial状态表 - 跟踪用户级别的Trial使用权
+// 用户 Trial 资格追踪表
 model UserTrialStatus {
-  id                  String    @id @default(uuid()) @db.Uuid
-  userId              String    @unique @map("user_id") @db.VarChar(100)
-  hasUsedTrial        Boolean   @default(false) @map("has_used_trial")
-  trialActivatedAt    DateTime? @map("trial_activated_at")
-  initialTrialOrgIds  Json?     @map("initial_trial_org_ids") @db.JsonB
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String    @unique @map("user_id") @db.VarChar(255)
+  hasUsedTrial       Boolean   @default(false) @map("has_used_trial")
+  trialActivatedAt   DateTime? @map("trial_activated_at")
+  initialTrialOrgIds Json?     @map("initial_trial_org_ids") @db.JsonB // 使用 trial 的组织列表
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   @@map("user_trial_status")
   @@index([userId])
   @@index([hasUsedTrial])
 }
 
-// 订阅表
+// Stripe 订阅镜像 + 业务映射表
 model Subscription {
   id                   String   @id @default(uuid()) @db.Uuid
-  orgId                String   @map("org_id") @db.VarChar(100) // 组织ID(来自auth-service)
-  payerId              String   @map("payer_id") @db.VarChar(100) // 付款人ID(来自auth-service)
-  billingCycle         String   @map("billing_cycle") @default("monthly") @db.VarChar(20)
-  startedAt            DateTime? @map("started_at")
-  renewsAt             DateTime? @map("renews_at")
-  trialEndsAt          DateTime? @map("trial_ends_at")
-  status               SubscriptionStatus
-  autoRenew            Boolean  @default(true) @map("auto_renew")
-  standardPrice        Decimal  @map("standard_price") @db.Decimal(10, 2) // Standard价格
-  trialSmsUsed         Int      @default(0) @map("trial_sms_used")
-  trialSmsEnabled      Boolean  @default(true) @map("trial_sms_enabled")
-  smsMonthlyBudget     Decimal? @map("sms_monthly_budget") @db.Decimal(10, 2) // null=无限
-  smsCurrentSpending   Decimal  @default(0) @map("sms_current_spending") @db.Decimal(10, 2)
-  smsBudgetAlerts      Json     @default("[]") @map("sms_budget_alerts") @db.JsonB // ['50','95']
-  smsNotifyByEmail     Boolean  @default(true) @map("sms_notify_by_email")
-  smsNotifyBySms       Boolean  @default(false) @map("sms_notify_by_sms")
-  gracePeriodEndsAt    DateTime? @map("grace_period_ends_at")
-  graceAlertSent       Boolean  @default(false) @map("grace_alert_sent")
-  paymentProvider      String?  @map("payment_provider") @db.VarChar(50) // stripe/paypal
-  providerCustomerId   String?  @map("provider_customer_id") @db.VarChar(255)
-  providerMetadata     Json?    @map("provider_metadata") @db.JsonB
-  paymentLast4         String?  @map("payment_last4") @db.VarChar(4)
-  cancelledAt          DateTime? @map("cancelled_at")
-  cancelReason         String?  @map("cancel_reason") @db.Text
+  orgId                String   @unique @map("org_id") @db.VarChar(255) // 组织 ID
+  payerId              String   @map("payer_id") @db.VarChar(255) // 付款人 ID
+  stripeCustomerId     String   @map("stripe_customer_id") @db.VarChar(255) // Stripe Customer ID
+  stripeSubscriptionId String   @unique @map("stripe_subscription_id") @db.VarChar(255) // Stripe Subscription ID
+  status               String   @db.VarChar(50) // 镜像 Stripe 状态: trial/active/past_due/unpaid/canceled
+  metadata             Json?    @db.JsonB // 额外业务数据
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
 
-  subscriptionModules   SubscriptionModule[]
-  subscriptionResources SubscriptionResource[]
-  suspendedResources    SuspendedResource[]
-  usages                Usage[]
-  invoices              Invoice[]
-  subscriptionLogs      SubscriptionLog[]
+  logs SubscriptionLog[]
 
-  @@unique([orgId])
   @@map("subscriptions")
   @@index([orgId])
   @@index([payerId])
+  @@index([stripeCustomerId])
   @@index([status])
-  @@index([renewsAt])
-  @@index([trialEndsAt])
-  @@index([gracePeriodEndsAt])
-}
-
-// 订阅模块关联表
-model SubscriptionModule {
-  id             String    @id @default(uuid()) @db.Uuid
-  subscriptionId String    @map("subscription_id") @db.Uuid
-  moduleId       String    @map("module_id") @db.Uuid
-  isActive       Boolean   @default(true) @map("is_active")
-  addedAt        DateTime  @map("added_at")
-  removedAt      DateTime? @map("removed_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-
-  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  module       Module       @relation(fields: [moduleId], references: [id])
-
-  @@unique([subscriptionId, moduleId])
-  @@map("subscription_modules")
-  @@index([subscriptionId])
-  @@index([moduleId])
-  @@index([isActive])
-}
-
-// 订阅资源关联表
-model SubscriptionResource {
-  id             String    @id @default(uuid()) @db.Uuid
-  subscriptionId String    @map("subscription_id") @db.Uuid
-  resourceId     String    @map("resource_id") @db.Uuid
-  quantity       Int       // 购买数量(额外购买)
-  addedAt        DateTime  @map("added_at")
-  removedAt      DateTime? @map("removed_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-
-  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  resource     Resource     @relation(fields: [resourceId], references: [id])
-
-  @@unique([subscriptionId, resourceId])
-  @@map("subscription_resources")
-  @@index([subscriptionId])
-  @@index([resourceId])
-}
-
-// 暂停资源表
-model SuspendedResource {
-  id                String    @id @default(uuid()) @db.Uuid
-  subscriptionId    String    @map("subscription_id") @db.Uuid
-  resourceType      String    @map("resource_type") @db.VarChar(50) // device/account
-  resourceSubtype   String    @map("resource_subtype") @db.VarChar(50) // pos/kiosk/tablet/manager/staff
-  resourceTargetId  String    @map("resource_target_id") @db.VarChar(100) // 设备ID或账号ID
-  suspendedAt       DateTime  @map("suspended_at")
-  graceExpiresAt    DateTime  @map("grace_expires_at") // 宽限期结束(30天后)
-  reason            String    @db.VarChar(100) // DOWNGRADE/PAYMENT_FAILED/MANUAL
-  restoredAt        DateTime? @map("restored_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
-
-  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-
-  @@map("suspended_resources")
-  @@index([subscriptionId])
-  @@index([resourceTargetId])
-  @@index([graceExpiresAt])
-}
-
-// ========================================
-// 第三层:计费结算
-// ========================================
-
-// 使用量表
-model Usage {
-  id               String    @id @default(uuid()) @db.Uuid
-  subscriptionId   String    @map("subscription_id") @db.Uuid
-  moduleId         String?   @map("module_id") @db.Uuid
-  usageType        String    @map("usage_type") @db.VarChar(50) // sms/api_call
-  quantity         Int
-  unitPrice        Decimal   @map("unit_price") @db.Decimal(10, 4)
-  amount           Decimal   @db.Decimal(10, 2)
-  isFree           Boolean   @default(false) @map("is_free") // Trial额度内
-  metadata         Json?     @db.JsonB
-  providerRecordId String?   @map("provider_record_id") @db.VarChar(255)
-  billedAt         DateTime? @map("billed_at")
-  invoiceId        String?   @map("invoice_id") @db.Uuid
-  createdAt        DateTime  @default(now()) @map("created_at")
-
-  subscription  Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  module        Module?       @relation(fields: [moduleId], references: [id])
-  invoice       Invoice?      @relation(fields: [invoiceId], references: [id])
-  usagePricing  UsagePricing  @relation(fields: [usageType], references: [usageType])
-
-  @@map("usages")
-  @@index([subscriptionId])
-  @@index([moduleId])
-  @@index([usageType])
-  @@index([billedAt])
-  @@index([invoiceId])
   @@index([createdAt])
 }
 
-// 发票表
-model Invoice {
-  id                String        @id @default(uuid()) @db.Uuid
-  subscriptionId    String        @map("subscription_id") @db.Uuid
-  periodStart       DateTime      @map("period_start")
-  periodEnd         DateTime      @map("period_end")
-  items             Json          @db.JsonB // 账单明细JSON
-  subtotal          Decimal       @db.Decimal(10, 2)
-  discount          Decimal       @default(0) @db.Decimal(10, 2)
-  tax               Decimal       @default(0) @db.Decimal(10, 2)
-  total             Decimal       @db.Decimal(10, 2)
-  status            InvoiceStatus
-  paidAt            DateTime?     @map("paid_at")
-  paymentProvider   String?       @map("payment_provider") @db.VarChar(50)
-  providerInvoiceId String?       @map("provider_invoice_id") @db.VarChar(255)
-  providerMetadata  Json?         @map("provider_metadata") @db.JsonB
-  failureReason     String?       @map("failure_reason") @db.Text
-  retryCount        Int           @default(0) @map("retry_count")
-  nextRetryAt       DateTime?     @map("next_retry_at")
-  number            String        @unique @db.VarChar(50) // INV-2025-01-001
-  pdfUrl            String?       @map("pdf_url") @db.Text
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
+// ========================================
+// 第三层: 审计和 Webhook
+// ========================================
 
-  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  usages       Usage[]
+// Stripe Webhook 事件记录表（幂等性和审计）
+model WebhookEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  stripeEventId String   @unique @map("stripe_event_id") @db.VarChar(255)
+  eventType     String   @map("event_type") @db.VarChar(255)
+  payload       Json     @db.JsonB // 原始 Stripe 事件 payload
+  status        String   @default("received") @db.VarChar(50) // received/processed/failed
+  error         String?  @db.Text // 处理错误信息
+  processedAt   DateTime? @map("processed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
 
-  @@map("invoices")
-  @@index([subscriptionId])
+  @@map("webhook_events")
+  @@index([stripeEventId])
+  @@index([eventType])
   @@index([status])
-  @@index([periodStart, periodEnd])
-  @@index([number])
+  @@index([createdAt])
 }
 
-// 支付方式表
-model PaymentMethod {
-  id                 String    @id @default(uuid()) @db.Uuid
-  userId             String    @map("user_id") @db.VarChar(100) // 来自auth-service
-  provider           String    @db.VarChar(50) // stripe/paypal
-  providerMethodId   String    @map("provider_method_id") @db.VarChar(255)
-  providerMetadata   Json?     @map("provider_metadata") @db.JsonB
-  brand              String?   @db.VarChar(50) // visa/mastercard
-  last4              String?   @db.VarChar(4)
-  expiresAt          DateTime? @map("expires_at") @db.Date
-  isDefault          Boolean   @default(false) @map("is_default")
-  isActive           Boolean   @default(true) @map("is_active")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
-
-  @@map("payment_methods")
-  @@index([userId])
-  @@index([provider])
-  @@index([isDefault])
-}
-
-// 订阅日志表
+// 订阅操作日志表（业务审计）
 model SubscriptionLog {
-  id             String   @id @default(uuid()) @db.Uuid
-  subscriptionId String   @map("subscription_id") @db.Uuid
-  action         String   @db.VarChar(100) // 操作类型
-  actorId        String   @map("actor_id") @db.VarChar(100) // 操作人ID
-  details        Json?    @db.JsonB
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  id             String       @id @default(uuid()) @db.Uuid
+  subscriptionId String       @map("subscription_id") @db.Uuid
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  action         String       @db.VarChar(255) // created/activated/cancelled/module_added 等
+  metadata       Json?        @db.JsonB
+  createdAt      DateTime     @default(now()) @map("created_at")
 
   @@map("subscription_logs")
   @@index([subscriptionId])
@@ -332,61 +127,20 @@ model SubscriptionLog {
   @@index([createdAt])
 }
 
-// Webhook事件表（支持多支付商）
-model WebhookEvent {
-  id          String   @id @default(uuid()) @db.Uuid
-  eventId     String   @unique @map("event_id") @db.VarChar(255) // 支付商事件ID
-  provider    String   @db.VarChar(50) // stripe/paypal/其他
-  eventType   String   @map("event_type") @db.VarChar(100) // 事件类型
-  payload     Json?    @db.JsonB // 原始payload（用于调试和重放）
-  processed   Boolean  @default(true) // 是否处理成功
-  attempts    Int      @default(1) // 处理尝试次数
-  error       String?  @db.Text // 错误信息（如果处理失败）
-  processedAt DateTime @map("processed_at") // 处理时间
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  @@map("webhook_events")
-  @@index([eventId])
-  @@index([provider])
-  @@index([eventType])
-  @@index([processedAt])
-  @@index([processed])
-}
-
 // ========================================
 // 枚举类型
 // ========================================
+
+enum PlanStatus {
+  PENDING
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
 
 enum ModuleStatus {
   ACTIVE
   DEPRECATED
   SUSPENDED
   COMING_SOON
-}
-
-enum ResourceStatus {
-  ACTIVE
-  DEPRECATED
-}
-
-enum SubscriptionStatus {
-  TRIAL    // 试用期
-  ACTIVE   // 活跃
-  EXPIRED  // 已过期
-  SUSPENDED // 暂停
-  CANCELLED // 已取消
-}
-
-enum InvoiceStatus {
-  PENDING   // 待支付
-  PAID      // 已支付
-  FAILED    // 支付失败
-  REFUNDED  // 已退款
-}
-
-enum StandardPlanStatus {
-  PENDING   // 待激活（新创建的默认状态）
-  ACTIVE    // 当前生效（同时只能有一个）
-  ARCHIVED  // 历史版本
-  DELETED   // 已删除（软删除）
 }

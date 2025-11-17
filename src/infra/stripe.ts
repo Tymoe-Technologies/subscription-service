@@ -112,7 +112,21 @@ export class StripeService {
       subscriptionParams.metadata = params.metadata;
     }
 
-    return await this.stripe.subscriptions.create(subscriptionParams);
+    console.log('\n' + '='.repeat(80));
+    console.log('📤 [Stripe] 创建订阅请求参数:');
+    console.log('='.repeat(80));
+    console.log(JSON.stringify(subscriptionParams, null, 2));
+    console.log('='.repeat(80) + '\n');
+    
+    const subscription = await this.stripe.subscriptions.create(subscriptionParams);
+    
+    console.log('\n' + '='.repeat(80));
+    console.log('📥 [Stripe] 创建订阅响应 (完整对象):');
+    console.log('='.repeat(80));
+    console.log(JSON.stringify(subscription, null, 2));
+    console.log('='.repeat(80) + '\n');
+    
+    return subscription;
   }
 
   // 获取订阅
