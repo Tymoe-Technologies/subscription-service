@@ -161,35 +161,6 @@ export class StripeService {
     }
   }
 
-  // 创建价格
-  async createPrice(params: {
-    productId: string;
-    unitAmount: number;
-    currency: string;
-    interval: 'month' | 'year';
-    metadata?: Record<string, string>;
-  }): Promise<Stripe.Price> {
-    return await this.stripe.prices.create({
-      product: params.productId,
-      unit_amount: params.unitAmount,
-      currency: params.currency,
-      recurring: {
-        interval: params.interval,
-      },
-      ...(params.metadata && { metadata: params.metadata }),
-    });
-  }
-
-  // 获取价格
-  async getPrice(priceId: string): Promise<Stripe.Price | null> {
-    try {
-      return await this.stripe.prices.retrieve(priceId);
-    } catch (error) {
-      logger.error('获取Stripe价格失败:', error);
-      return null;
-    }
-  }
-
   // 列出客户的订阅
   async listCustomerSubscriptions(customerId: string): Promise<Stripe.Subscription[]> {
     try {
@@ -265,6 +236,141 @@ export class StripeService {
     }
 
     return await this.stripe.checkout.sessions.create(sessionParams);
+  }
+
+  /**
+   * 创建 Stripe Product
+   * 用于Admin API创建Plan/Module时同步到Stripe
+   */
+  async createProduct(params: {
+    name: string;
+    description?: string;
+    metadata?: Record<string, string>;
+  }): Promise<Stripe.Product> {
+    logger.info('创建 Stripe Product', { name: params.name });
+
+    try {
+      const productData: Stripe.ProductCreateParams = {
+        name: params.name,
+        metadata: params.metadata || {},
+      };
+
+      if (params.description) {
+        productData.description = params.description;
+      }
+
+      const product = await this.stripe.products.create(productData);
+
+      logger.info('Stripe Product 创建成功', { productId: product.id });
+      return product;
+    } catch (error) {
+      logger.error('创建 Stripe Product 失败', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * 更新 Stripe Product
+   * 用于PATCH /admin/plans/:id 或 /admin/modules/:id 更新name/description时
+   * 也可用于归档Product（设置active=false）
+   */
+  async updateProduct(
+    productId: string,
+    params: {
+      name?: string;
+      description?: string;
+      active?: boolean;
+      metadata?: Record<string, string>;
+    }
+  ): Promise<Stripe.Product> {
+    logger.info('更新 Stripe Product', { productId, params });
+
+    try {
+      const product = await this.stripe.products.update(productId, params);
+
+      logger.info('Stripe Product 更新成功', { productId });
+      return product;
+    } catch (error) {
+      logger.error('更新 Stripe Product 失败', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * 创建 Stripe Price
+   * 用于Admin API创建Plan/Module时同步到Stripe
+   */
+  async createPrice(params: {
+    product: string; // Product ID
+    unitAmount: number; // 金额(cents)
+    currency: string; // 货币代码(小写)
+    recurring: {
+      interval: 'month' | 'year';
+    };
+    metadata?: Record<string, string>;
+  }): Promise<Stripe.Price> {
+    logger.info('创建 Stripe Price', {
+      product: params.product,
+      unitAmount: params.unitAmount,
+      currency: params.currency,
+    });
+
+    try {
+      const price = await this.stripe.prices.create({
+        product: params.product,
+        unit_amount: params.unitAmount,
+        currency: params.currency,
+        recurring: params.recurring,
+        metadata: params.metadata || {},
+      });
+
+      logger.info('Stripe Price 创建成功', { priceId: price.id });
+      return price;
+    } catch (error) {
+      logger.error('创建 Stripe Price 失败', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * 更新 Stripe Price (只能更新active状态和metadata)
+   * Stripe规定Price的金额、货币、周期不可修改
+   */
+  async updatePrice(
+    priceId: string,
+    params: {
+      active?: boolean;
+      metadata?: Record<string, string>;
+    }
+  ): Promise<Stripe.Price> {
+    logger.info('更新 Stripe Price', { priceId, params });
+
+    try {
+      const price = await this.stripe.prices.update(priceId, params);
+
+      logger.info('Stripe Price 更新成功', { priceId });
+      return price;
+    } catch (error) {
+      logger.error('更新 Stripe Price 失败', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * 获取 Stripe Price 详情
+   * 用于通过Price ID获取Product ID
+   */
+  async getPrice(priceId: string): Promise<Stripe.Price> {
+    logger.info('获取 Stripe Price 详情', { priceId });
+
+    try {
+      const price = await this.stripe.prices.retrieve(priceId);
+      logger.info('Stripe Price 获取成功', { priceId });
+      return price;
+    } catch (error) {
+      logger.error('获取 Stripe Price 失败', { error });
+      throw error;
+    }
   }
 }
 

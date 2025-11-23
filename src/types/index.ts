@@ -32,11 +32,25 @@ export interface JWTPayload {
 export interface AuthenticatedRequest extends Request {
   user: {
     id: string;
+    userId?: string;          // 兼容旧代码，与 id 同义
     email: string;
     iat: number;
     exp: number;
-    organizationId?: string | undefined;
-    organizationName?: string | undefined;
+    organizationId?: string;
+    organizationIds?: string[]; // 用户所属的所有组织ID列表
+    organizationName?: string;
+    userType?: 'USER' | 'ACCOUNT';
+    accountType?: 'MANAGER' | 'STAFF';
+    jti?: string;             // JWT ID (用于黑名单检查)
+    organizations?: Array<{
+      id: string;
+      name: string;
+      orgName?: string;
+      orgType?: 'MAIN' | 'BRANCH' | 'FRANCHISE';
+      parentOrgId?: string;
+      role?: string;
+      status?: string;
+    }>;
   };
 }
 

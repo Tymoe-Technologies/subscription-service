@@ -20,6 +20,9 @@ const envSchema = z.object({
   // 内部API认证
   INTERNAL_API_KEY: z.string().min(1, 'INTERNAL_API_KEY is required'),
 
+  // Admin API认证（逗号分隔的密钥列表）
+  ADMIN_API_KEYS: z.string().min(1, 'ADMIN_API_KEYS is required'),
+
 
   // 日志配置
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
@@ -35,6 +38,7 @@ const envSchema = z.object({
 
   // 外部服务配置
   AUTH_SERVICE_URL: z.string().default('http://localhost:8087'),
+  FRONTEND_URL: z.string().default('http://localhost:3000'),
 });
 
 function validateEnv() {

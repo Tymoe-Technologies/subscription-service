@@ -43,6 +43,9 @@ export const service = {
     corsOrigin: env.CORS_ORIGIN,
   },
 
+  // Admin API配置
+  adminApiKeys: env.ADMIN_API_KEYS.split(',').map((key) => key.trim()),
+
   // 外部服务配置
   externalServices: {
     authService: env.AUTH_SERVICE_URL || 'http://localhost:8087',

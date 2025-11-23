@@ -13,40 +13,48 @@ datasource db {
 
 // 基础订阅计划表
 model Plan {
-  id                 String   @id @default(uuid()) @db.Uuid
-  name               String   @db.VarChar(255)
-  version            String   @unique @db.VarChar(255)
-  description        String?  @db.Text
-  monthlyPrice       Decimal  @map("monthly_price") @db.Decimal(10, 2)
-  includedModuleKeys Json     @map("included_module_keys") @default("[]") @db.JsonB // 包含的模块 keys
-  trialDurationDays  Int      @map("trial_duration_days")
+  id                 String     @id @db.Uuid
+  key                String     @unique @db.VarChar(100)
+  name               String     @db.VarChar(255)
+  version            String     @db.VarChar(255)
+  description        String?
+  monthlyPrice       Decimal    @map("monthly_price") @db.Decimal(10, 2)
+  includedModules    Json       @map("included_modules") @default("[]")
+  trialDurationDays  Int        @map("trial_duration_days")
   status             PlanStatus @default(ACTIVE)
-  stripePriceId      String?  @map("stripe_price_id") @db.VarChar(255)
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  stripePriceId      String?    @map("stripe_price_id") @db.VarChar(255)
+  stripeProductId    String?    @map("stripe_product_id") @db.VarChar(255)
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @map("updated_at")
 
   @@map("plans")
+  @@index([key])
   @@index([status])
   @@index([stripePriceId])
+  @@index([stripeProductId])
 }
 
 // 附加功能模块表
 model Module {
-  id            String       @id @default(uuid()) @db.Uuid
-  name          String       @db.VarChar(255)
-  version       String       @unique @db.VarChar(255)
-  description   String?      @db.Text
-  monthlyPrice  Decimal      @map("monthly_price") @db.Decimal(10, 2)
-  dependencies  Json         @default("[]") @db.JsonB // 依赖的模块列表
-  counts        Int          @default(1) // 数量/使用次数
-  status        ModuleStatus @default(ACTIVE)
-  stripePriceId String?      @map("stripe_price_id") @db.VarChar(255)
-  createdAt     DateTime     @default(now()) @map("created_at")
-  updatedAt     DateTime     @updatedAt @map("updated_at")
+  id              String       @id @db.Uuid
+  key             String       @unique @db.VarChar(100)
+  name            String       @db.VarChar(255)
+  version         String       @db.VarChar(255)
+  description     String?
+  monthlyPrice    Decimal      @map("monthly_price") @db.Decimal(10, 2)
+  dependencies    Json         @default("[]")
+  allowMultiple   Boolean      @default(false) @map("allow_multiple")
+  status          ModuleStatus @default(ACTIVE)
+  stripePriceId   String?      @map("stripe_price_id") @db.VarChar(255)
+  stripeProductId String?      @map("stripe_product_id") @db.VarChar(255)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @map("updated_at")
 
   @@map("modules")
+  @@index([key])
   @@index([status])
   @@index([stripePriceId])
+  @@index([stripeProductId])
 }
 
 // ========================================
@@ -55,39 +63,38 @@ model Module {
 
 // 用户 Trial 资格追踪表
 model UserTrialStatus {
-  id                 String    @id @default(uuid()) @db.Uuid
+  id                 String    @id @db.Uuid
   userId             String    @unique @map("user_id") @db.VarChar(255)
   hasUsedTrial       Boolean   @default(false) @map("has_used_trial")
   trialActivatedAt   DateTime? @map("trial_activated_at")
-  initialTrialOrgIds Json?     @map("initial_trial_org_ids") @db.JsonB // 使用 trial 的组织列表
+  initialTrialOrgIds Json?     @map("initial_trial_org_ids")
   createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  updatedAt          DateTime  @map("updated_at")
 
   @@map("user_trial_status")
-  @@index([userId])
   @@index([hasUsedTrial])
+  @@index([userId])
 }
 
 // Stripe 订阅镜像 + 业务映射表
 model Subscription {
-  id                   String   @id @default(uuid()) @db.Uuid
-  orgId                String   @unique @map("org_id") @db.VarChar(255) // 组织 ID
-  payerId              String   @map("payer_id") @db.VarChar(255) // 付款人 ID
-  stripeCustomerId     String   @map("stripe_customer_id") @db.VarChar(255) // Stripe Customer ID
-  stripeSubscriptionId String   @unique @map("stripe_subscription_id") @db.VarChar(255) // Stripe Subscription ID
-  status               String   @db.VarChar(50) // 镜像 Stripe 状态: trial/active/past_due/unpaid/canceled
-  metadata             Json?    @db.JsonB // 额外业务数据
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
-
-  logs SubscriptionLog[]
+  id                   String              @id @db.Uuid
+  orgId                String              @unique @map("org_id") @db.VarChar(255)
+  payerId              String              @map("payer_id") @db.VarChar(255)
+  stripeCustomerId     String              @map("stripe_customer_id") @db.VarChar(255)
+  stripeSubscriptionId String              @unique @map("stripe_subscription_id") @db.VarChar(255)
+  status               String              @db.VarChar(50)
+  items                Json                @default("[]")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @map("updated_at")
+  logs                 SubscriptionLog[]
 
   @@map("subscriptions")
+  @@index([createdAt])
   @@index([orgId])
   @@index([payerId])
-  @@index([stripeCustomerId])
   @@index([status])
-  @@index([createdAt])
+  @@index([stripeCustomerId])
 }
 
 // ========================================
@@ -96,51 +103,51 @@ model Subscription {
 
 // Stripe Webhook 事件记录表（幂等性和审计）
 model WebhookEvent {
-  id            String   @id @default(uuid()) @db.Uuid
-  stripeEventId String   @unique @map("stripe_event_id") @db.VarChar(255)
-  eventType     String   @map("event_type") @db.VarChar(255)
-  payload       Json     @db.JsonB // 原始 Stripe 事件 payload
-  status        String   @default("received") @db.VarChar(50) // received/processed/failed
-  error         String?  @db.Text // 处理错误信息
+  id            String    @id @db.Uuid
+  stripeEventId String    @unique @map("stripe_event_id") @db.VarChar(255)
+  eventType     String    @map("event_type") @db.VarChar(255)
+  payload       Json
+  status        String    @default("received") @db.VarChar(50)
+  error         String?
   processedAt   DateTime? @map("processed_at")
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   @@map("webhook_events")
-  @@index([stripeEventId])
+  @@index([createdAt])
   @@index([eventType])
   @@index([status])
-  @@index([createdAt])
+  @@index([stripeEventId])
 }
 
 // 订阅操作日志表（业务审计）
 model SubscriptionLog {
-  id             String       @id @default(uuid()) @db.Uuid
-  subscriptionId String       @map("subscription_id") @db.Uuid
-  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  action         String       @db.VarChar(255) // created/activated/cancelled/module_added 等
-  metadata       Json?        @db.JsonB
-  createdAt      DateTime     @default(now()) @map("created_at")
+  id             String        @id @db.Uuid
+  subscriptionId String?       @map("subscription_id") @db.Uuid
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  action         String        @db.VarChar(255)
+  metadata       Json?
+  createdAt      DateTime      @default(now()) @map("created_at")
 
   @@map("subscription_logs")
-  @@index([subscriptionId])
   @@index([action])
   @@index([createdAt])
+  @@index([subscriptionId])
 }
 
 // ========================================
 // 枚举类型
 // ========================================
 
-enum PlanStatus {
-  PENDING
-  ACTIVE
-  ARCHIVED
-  DELETED
-}
-
 enum ModuleStatus {
   ACTIVE
   DEPRECATED
   SUSPENDED
   COMING_SOON
+}
+
+enum PlanStatus {
+  PENDING
+  ACTIVE
+  ARCHIVED
+  DELETED
 }

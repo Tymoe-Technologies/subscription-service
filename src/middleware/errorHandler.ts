@@ -13,7 +13,9 @@ export function errorHandler(
     stack: error.stack,
     method: req.method,
     url: req.url,
-    body: req.body
+    body: req.body,
+    params: req.params,
+    query: req.query,
   });
 
   // Don't expose stack traces in production
@@ -23,12 +25,10 @@ export function errorHandler(
   if (error instanceof AppError) {
     res.status(error.statusCode).json({
       success: false,
-      error: {
-        code: error.code,
-        message: error.message,
-        ...(error.data && { data: error.data }),
-        ...(isDevelopment && error.stack && { stack: error.stack })
-      }
+      error: error.code,
+      detail: error.message,
+      ...(error.data && { data: error.data }),
+      ...(isDevelopment && error.stack && { stack: error.stack })
     });
     return;
   }
@@ -36,10 +36,8 @@ export function errorHandler(
   // 处理普通Error
   res.status(500).json({
     success: false,
-    error: {
-      code: 'SERVER_ERROR',
-      message: isDevelopment ? error.message : 'Internal server error',
-      ...(isDevelopment && error.stack && { stack: error.stack })
-    }
+    error: 'server_error',
+    detail: isDevelopment ? error.message : 'Internal server error',
+    ...(isDevelopment && error.stack && { stack: error.stack })
   });
 }
