@@ -351,7 +351,3 @@ Proprietary - Tymoe Inc.
 ## Support
 
 For issues and questions, contact the Tymoe Engineering team.
-
-```
-
-```
