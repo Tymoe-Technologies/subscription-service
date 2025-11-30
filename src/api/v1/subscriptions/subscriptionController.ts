@@ -26,7 +26,17 @@ export class SubscriptionController {
     try {
       // 1. 提取参数
       const { orgId, planKey, moduleKeys } = req.body as CreateCheckoutRequestBody;
-      const userId = req.user?.userId;
+      const { userType, userId } = req.user || {};
+
+      // 2. 检查必须是 USER token（不允许 ACCOUNT token 订阅）
+      if (userType !== 'USER') {
+        res.status(403).json({
+          success: false,
+          error: 'forbidden',
+          detail: 'Only organization owners (USER accounts) can create subscriptions. ACCOUNT users (OWNER/MANAGER/STAFF) cannot subscribe.',
+        });
+        return;
+      }
 
       if (!userId) {
         res.status(401).json({
@@ -37,7 +47,7 @@ export class SubscriptionController {
         return;
       }
 
-      // 2. 调用 Service 层
+      // 3. 调用 Service 层
       const result = await this.subscriptionService.createCheckoutSession({
         userId,
         orgId,
@@ -116,8 +126,19 @@ export class SubscriptionController {
     next: NextFunction
   ): Promise<void> => {
     try {
-      // 1. 提取路径参数
+      // 1. 提取路径参数和用户信息
       const { orgId } = req.params;
+      const { userType } = req.user || {};
+
+      // 2. 检查必须是 USER token（不允许 ACCOUNT token 访问 billing portal）
+      if (userType !== 'USER') {
+        res.status(403).json({
+          success: false,
+          error: 'forbidden',
+          detail: 'Only organization owners (USER accounts) can access the billing portal.',
+        });
+        return;
+      }
 
       if (!orgId) {
         res.status(400).json({
@@ -128,7 +149,7 @@ export class SubscriptionController {
         return;
       }
 
-      // 2. 调用 Service 层
+      // 3. 调用 Service 层
       const result = await this.subscriptionService.createBillingPortalSession({ orgId });
 
       // 3. 返回成功响应
