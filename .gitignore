@@ -31,8 +31,6 @@ internal_public.pem
 logs/
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
@@ -94,6 +92,8 @@ dist
 # Temporary folders
 tmp/
 temp/
+*.tmp
+*.temp
 
 # Editor directories and files
 .vscode/
@@ -178,5 +178,4 @@ jest.config.js
 
 # Personal deployment scripts (if not used by team)
 scripts/deploy.sh
-
 .env.example
