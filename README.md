@@ -351,3 +351,32 @@ Proprietary - Tymoe Inc.
 ## Support
 
 For issues and questions, contact the Tymoe Engineering team.
+
+## 🚀 Traefik Gateway 集成
+
+### 新增功能
+- **Gateway Auth 中间件**: `src/middleware/gatewayAuthMiddleware.ts`
+- **双重认证支持**: 同时支持JWT和Traefik ForwardAuth
+- **Traefik部署配置**: `docker-compose.traefik.yml`
+- **本地测试配置**: `docker-compose.test.yml` + `.env.test`
+
+### 测试环境端口配置
+为避免与生产环境冲突，测试环境使用以下端口：
+- **Traefik Gateway**: `9080` (HTTP) / `9082` (Dashboard)
+- **PostgreSQL测试数据库**: 内部容器网络
+- **Redis测试缓存**: 内部容器网络
+
+### 快速测试
+```bash
+# 1. 启动测试数据库
+docker network create tymoe-test-network
+docker run -d --name tymoe-test-postgres --network tymoe-test-network \
+  -e POSTGRES_PASSWORD=test123 -e POSTGRES_DB=tymoe_test postgres:15-alpine
+docker run -d --name tymoe-test-redis --network tymoe-test-network redis:7-alpine
+
+# 2. 构建并启动服务
+docker compose -f docker-compose.test.yml up -d --build
+
+# 3. 测试Gateway认证
+curl -H 'Authorization: Bearer test-token' http://localhost:9080/api/subscription-service/health
+```

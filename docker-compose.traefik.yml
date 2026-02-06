@@ -1,0 +1,63 @@
+version: '3.8'
+
+networks:
+  tymoe-network:
+    external: true
+
+volumes:
+  subscription_postgres_data:
+  subscription_redis_data:
+
+services:
+  subscription-service:
+    build: .
+    container_name: subscription-service-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    labels:
+      # Traefik路由器标签
+      - "traefik.enable=true"
+      - "traefik.http.routers.subscription-service.rule=Host(`subscriptions.ryan.local`) || PathPrefix(`/api/subscription-service`)"
+      - "traefik.http.routers.subscription-service.entrypoints=web"
+      - "traefik.http.routers.subscription-service.service=subscription-service"
+      - "traefik.http.routers.subscription-service.middlewares=tymoe-auth-gate@file"
+      # 服务定义
+      - "traefik.http.services.subscription-service.loadbalancer.server.port=8088"
+    expose:
+      - "8088"
+    networks:
+      - tymoe-network
+    depends_on:
+      - subscription-postgres
+      - subscription-redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  subscription-postgres:
+    image: postgres:15-alpine
+    container_name: subscription-postgres
+    environment:
+      POSTGRES_DB: subscription_service
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: your_secure_password
+    volumes:
+      - subscription_postgres_data:/var/lib/postgresql/data
+    networks:
+      - tymoe-network
+    restart: unless-stopped
+    # 注意：数据库不应通过Traefik暴露，只在内部访问
+
+  subscription-redis:
+    image: redis:7-alpine
+    container_name: subscription-redis
+    networks:
+      - tymoe-network
+    volumes:
+      - subscription_redis_data:/data
+    restart: unless-stopped
+    # Redis只供内部服务访问

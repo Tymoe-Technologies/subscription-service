@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { SubscriptionController } from './subscriptionController.js';
-import { authMiddleware } from '../../../middleware/authMiddleware.js';
+import { dualAuthMiddleware } from '../../../middleware/gatewayAuthMiddleware.js';
 import { orgPermissionMiddleware } from '../../../middleware/orgPermissionMiddleware.js';
 import {
   validateCheckoutRequest,
@@ -18,7 +18,7 @@ const subscriptionController = new SubscriptionController();
 // 创建 Checkout Session
 router.post(
     '/checkout',
-    authMiddleware,              // 1. 验证 JWT token
+    dualAuthMiddleware,          // 1. 验证 JWT token 或 Gateway header
     orgPermissionMiddleware,     // 2. 检查用户对 orgId 的权限
     validateCheckoutRequest,     // 3. 验证请求体格式
     subscriptionController.createCheckout  // 4. 执行业务逻辑
@@ -27,7 +27,7 @@ router.post(
 // 获取订阅详情
 router.get(
     '/:orgId',
-    authMiddleware,              // 1. 验证 JWT token
+    dualAuthMiddleware,          // 1. 验证 JWT token 或 Gateway header
     validateOrgIdParam,          // 2. 验证路径参数
     orgPermissionMiddleware,     // 3. 检查用户对 orgId 的权限
     subscriptionController.getSubscription  // 4. 执行业务逻辑
@@ -36,7 +36,7 @@ router.get(
 // 创建 Billing Portal Session
 router.post(
     '/:orgId/portal',
-    authMiddleware,              // 1. 验证 JWT token
+    dualAuthMiddleware,          // 1. 验证 JWT token 或 Gateway header
     validateOrgIdParam,          // 2. 验证路径参数
     orgPermissionMiddleware,     // 3. 检查用户对 orgId 的权限
     subscriptionController.createPortal  // 4. 执行业务逻辑
